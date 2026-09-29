@@ -33,6 +33,11 @@ export const STATUS = {
   offline:  { label: "OFFLINE",  color: "#555a70", order: 5 },
 };
 
+/** Sentence-case status names shared by both interfaces. */
+export const STATUS_TEXT = {
+  blocked: "Needs approval", waiting: "Your turn", working: "Working", idle: "Idle", sleeping: "Sleeping", offline: "Offline",
+};
+
 export const KIND_ICON = {
   user: "»", think: "…", tool: "⚙", reply: "✉", done: "✓", error: "✗", wait: "!", system: "·",
 };

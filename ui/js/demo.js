@@ -56,17 +56,25 @@ export function createDemo() {
   };
   for (const s of sessions) {
     const now = Date.now();
-    push(s, { ts: s.lastTs - 30000, kind: "user", station: "hub", text: PROMPTS[s.id.length % PROMPTS.length] });
+    // Spread a believable history before each session's last activity (the pro timeline shows 30 min).
+    const end = { idle: now - 40 * 60000, sleeping: now - 5 * 3600000, offline: now - 3 * 3600000 }[s.status] ?? s.lastTs - 2000;
+    const active = ["working", "waiting", "blocked"].includes(s.status);
+    const span = (active ? 18 + (s.title.length % 8) : 4) * 60000;
+    const start = end - span;
+    push(s, { ts: start, kind: "user", station: "hub", text: PROMPTS[s.id.length % PROMPTS.length] });
     const tools = TOOLS[s.provider] || [];
-    for (let k = 0; k < 4 && tools.length; k++) {
+    const n = tools.length ? 10 : 0;
+    for (let k = 1; k <= n; k++) {
+      // Work comes in bursts: squeeze the steps towards the end of the span.
+      const ts = start + Math.round(span * Math.pow(k / (n + 1), 0.8));
+      if (k % 4 === 0) { push(s, { ts, kind: "think", station: "hub", text: "" }); continue; }
       const [tool, station, text] = tools[(k + s.title.length) % tools.length];
-      push(s, { ts: s.lastTs + 1, kind: "tool", station, tool, text });
+      push(s, { ts, kind: "tool", station, tool, text });
     }
     if (s.status === "waiting") push(s, { ts: now - 60000, kind: "done", station: "hub", text: "Changelog updated for 1.3.0" });
     if (s.status === "blocked") push(s, { ts: now - 30000, kind: "wait", station: "hub", text: "Waiting for your permission" });
-    if (s.status === "offline") push(s, { ts: now - 3 * 3600000, kind: "done", station: "hub", text: "Session closed" });
-    if (s.status === "idle") s.lastTs = now - 40 * 60000;
-    if (s.status === "sleeping") s.lastTs = now - 5 * 3600000;
+    if (s.status === "offline") push(s, { ts: end, kind: "done", station: "hub", text: "Session closed" });
+    if (!active) s.lastTs = end;
   }
 
   function tick() {

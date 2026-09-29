@@ -11,6 +11,16 @@ commands, and who is waiting for **you**.
 
 AgentTally only **reads** local log files. It never sends anything anywhere.
 
+### Two interfaces, same data
+
+Prefer something quieter for the office? Press **Pro view** in the top bar (or <kbd>U</kbd>) to
+switch to a professional workspace dashboard: one panel per project, one row per session with a
+30-minute activity timeline, the current activity, a tool-mix bar and the time it was last seen.
+Search, filters, sorting, session details and the activity log work the same in both. The pixel
+world is the default, and AgentTally remembers the one you picked.
+
+![The Pro workspace view with a session waiting for approval](docs/screenshots/pro.png)
+
 ## Install
 
 Download the latest version from the [Releases page](https://github.com/kasuken/AgentTally/releases/latest).
@@ -115,8 +125,9 @@ the world, party list, and world log together.
 - Drag to pan, scroll to zoom around the pointer, or use the zoom buttons. `F` fits the world.
 - **Motion** pauses animation while snapshots keep updating. Reduced-motion preferences
   are respected. Rendering is capped at 30 fps and stops while the page is hidden.
-- `Esc` closes session details; `?` opens the guide. Controls are keyboard accessible.
-- Time window, enabled sources, sorting, and motion preferences are saved locally.
+- `Esc` closes session details; `?` opens the guide; `U` switches between the Pixel and Pro
+  interfaces. Controls are keyboard accessible.
+- Time window, enabled sources, sorting, interface, and motion preferences are saved locally.
 
 The source badge explicitly distinguishes **DEMO**, **LIVE**, and **RECONNECTING**.
 Interrupted updates preserve the last snapshot, show a warning, and retry automatically.
@@ -187,8 +198,11 @@ src-tauri/src/
   model.rs          Session / Activity / Status, tool → station mapping
   providers/        one parser per agent log format
 ui/
-  index.html, style.css
-  js/world.js       hex map, layout, robots, camera, rendering
+  index.html        one page for both interfaces
+  style.css         Pixel interface (default)
+  pro.css           Pro interface, loaded instead of style.css
+  js/world.js       hex map, layout, robots, camera, rendering (Pixel)
+  js/board.js       project panels, session rows and activity timelines (Pro)
   js/sprites.js     pixel art: robots, tiles, buildings, bubbles
   js/main.js        data source, HUD, roster, logs
   js/selectors.js   time, project, provider, search, status, and sorting rules

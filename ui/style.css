@@ -484,3 +484,13 @@ body.motion-paused *, body.motion-paused *::before, body.motion-paused *::after 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* ---------------------------------------------------------------- interface switch */
+.pro-only { display: none !important; }
+.logo h1 { text-transform: uppercase; }
+.ui-toggle { white-space: nowrap; }
+.ui-short { display: none; }
+@media (max-width: 1100px) {
+  .ui-long { display: none; }
+  .ui-short { display: inline; }
+}

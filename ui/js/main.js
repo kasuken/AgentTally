@@ -1,7 +1,8 @@
 // Local-only dashboard controller. UI filters never change the underlying sessions.
 import { World } from "./world.js";
+import { Board } from "./board.js";
 import { robotSprite, drawBuilding } from "./sprites.js";
-import { providerMeta, STATUS, STATIONS, KIND_ICON, ago, compact, describe, escapeHtml as esc } from "./meta.js";
+import { providerMeta, STATUS, STATUS_TEXT, STATIONS, KIND_ICON, ago, compact, describe, escapeHtml as esc } from "./meta.js";
 import { createDemo } from "./demo.js";
 import { WINDOWS, selectSessions, sortSessions, needsAttention, isResting, inWindow } from "./selectors.js";
 
@@ -19,9 +20,21 @@ const state = {
   selected: null, received: 0, skew: 0, mode: "connecting", error: false,
   paused: load("tally.paused", motionPreference.matches) === true,
 };
-const world = new World($("world"), { onSelect: (key) => { state.selected = key; renderSide(); renderRoster(); } });
 const now = () => Date.now() - state.skew;
-const statusLabel = (s) => ({ blocked: "Needs approval", waiting: "Your turn", working: "Working", idle: "Idle", sleeping: "Sleeping", offline: "Offline" })[s];
+// Both interfaces share one selection; whichever view reports it, the other follows.
+function onSelect(key) {
+  state.selected = key;
+  world.selected = key; world.dirty = true;
+  board.setSelected(key);
+  renderSide(); renderRoster();
+}
+const world = new World($("world"), { onSelect });
+const board = new Board($("board"), { onSelect, now });
+// "pixel" is the 16-bit world (default); "pro" is the workspace board. Same data, same filters.
+const UIS = ["pixel", "pro"];
+let ui = document.documentElement.dataset.ui === "pro" ? "pro" : "pixel";
+const view = () => (ui === "pro" ? board : world);
+const statusLabel = (s) => STATUS_TEXT[s];
 const projectKey = (s) => s.cwd || s.project;
 const exactTime = (ts) => new Date(ts).toLocaleString();
 const time = (ts) => `<time data-ts="${ts}" title="${esc(exactTime(ts))}">${ago(now() - ts)}</time>`;
@@ -61,6 +74,7 @@ function refresh() {
   state.scope = state.snap.sessions.filter((s) => !state.hidden.has(s.provider) && inWindow(s, state.window, now()));
   state.visible = selectSessions(state.snap.sessions, state, now());
   world.setSessions(state.visible);
+  board.setSessions(state.visible);
   if (state.selected && !state.visible.some((s) => s.key === state.selected)) world.select(null);
   renderCounters(); renderLegend(); renderProjects(); renderRoster(); renderSide(); renderLog(); renderFilters(); renderEmpty();
 }
@@ -185,6 +199,7 @@ function renderSide() {
   if (!el.firstElementChild) el.innerHTML = '<header><img alt="" /><div><h2></h2><span class="pill"></span></div><button class="btn close" id="close-detail" aria-label="Close session details" title="Close (Esc)">✕</button></header><p class="attention-note" hidden></p><dl class="facts"></dl><div class="detail-actions"><button class="btn" id="focus-agent">⌖ Locate on map</button><button class="btn" id="copy-path">Copy project path</button></div><p id="copy-status" class="muted" role="status"></p><div class="stats"></div><h3>Recent activity</h3><ol class="quest"></ol>';
   el.querySelector("header img").src = portrait(s.provider,s.status);
   el.querySelector("h2").textContent = s.title;
+  $("focus-agent").textContent = ui === "pro" ? "Show in workspace" : "⌖ Locate on map";
   const pill = el.querySelector(".pill"); pill.style.color = STATUS[s.status].color; pill.textContent = statusLabel(s.status);
   const note = el.querySelector(".attention-note"); note.hidden = !needsAttention(s); note.className = `attention-note ${s.status}`;
   note.textContent = s.status === "blocked" ? `Permission requested. Review it in ${providerMeta(s.provider).name}.` : `Turn finished. Continue the conversation in ${providerMeta(s.provider).name}.`;
@@ -215,7 +230,7 @@ function renderLog() {
   reconcile($("world-log"), rows, (b,{s,e}) => {
     b.dataset.key = s.key;
     b.title = `${s.title}: ${describe(e)}`;
-    html(b, `${time(e.ts)}<span class="who" style="color:${providerMeta(s.provider).body}">${esc(providerMeta(s.provider).short)}@${esc(s.project)}</span><span class="what">${e.kind === "tool" ? STATIONS[e.station]?.icon || "⚙" : KIND_ICON[e.kind] || "·"} ${esc(describe(e))}</span>`);
+    html(b, `${time(e.ts)}<span class="who" style="color:${providerMeta(s.provider).body}"><span class="who-agent">${esc(providerMeta(s.provider).short)}</span><span class="who-at">@</span><span class="who-project">${esc(s.project)}</span></span><span class="what">${e.kind === "tool" ? STATIONS[e.station]?.icon || "⚙" : KIND_ICON[e.kind] || "·"} ${esc(describe(e))}</span>`);
   });
   if (!rows.length) html($("world-log"), '<li class="list-empty">Activity will appear here as your agents work.</li>');
 }
@@ -234,12 +249,12 @@ function renderEmpty() {
   $("empty-message").textContent = filtered ? "Try a wider time window, another project, or reset your filters." : "Start a session in Claude Code, Codex, Copilot or Gemini. Your agents will appear here automatically.";
   $("empty-reset").hidden = !filtered;
 }
-function filterRefresh() { refresh(); world.recenter(); }
+function filterRefresh() { refresh(); if (ui === "pixel") world.recenter(); }
 function resetFilters() {
   state.query = ""; state.project = ""; state.status = "all"; state.hidden.clear(); state.window = "6h";
   $("search").value = ""; save("tally.hidden", []); save("tally.window", state.window); filterRefresh();
 }
-function choose(key) { world.select(key); world.focus(key); }
+function choose(key) { world.select(key); view().focus(key); }
 for (const id of ["roster", "world-log"]) $(id).addEventListener("click", (e) => { const key = e.target.closest("button")?.dataset.key; if (key) choose(key); });
 for (const id of ["counters", "status-filter"]) $(id).addEventListener("click", (e) => { const value = e.target.closest("button")?.dataset.status; if (value) { state.status = value; filterRefresh(); } });
 $("window-filter").addEventListener("click", (e) => { const w = e.target.closest("button")?.dataset.w; if (w) { state.window = w; save("tally.window",w); filterRefresh(); } });
@@ -251,6 +266,26 @@ $("sort").addEventListener("change", (e) => { state.sort = e.target.value; save(
 $("reset-filters").onclick = resetFilters; $("empty-reset").onclick = resetFilters;
 $("recenter").onclick = () => world.recenter();
 $("zoom-in").onclick = () => world.zoom(1); $("zoom-out").onclick = () => world.zoom(-1);
+function applyUi(next) {
+  ui = UIS.includes(next) ? next : "pixel";
+  document.documentElement.dataset.ui = ui;
+  $("theme-pixel").disabled = ui !== "pixel";
+  $("theme-pro").disabled = ui !== "pro";
+  // Headings with a data-pro attribute use the plainer wording in the pro interface.
+  for (const el of document.querySelectorAll("[data-pro]")) {
+    el.dataset.pixel ??= el.textContent;
+    el.textContent = ui === "pro" ? el.dataset.pro : el.dataset.pixel;
+  }
+  const other = ui === "pro" ? "Pixel" : "Pro";
+  $("ui-toggle").querySelector(".ui-long").textContent = `${other} view`;
+  $("ui-toggle").querySelector(".ui-short").textContent = other;
+  $("ui-toggle").setAttribute("aria-label", `Switch to the ${other.toLowerCase()} interface`);
+  board.setActive(ui === "pro");
+  if (ui === "pixel") { world.dirty = true; world.recenter(); }
+  if (state.selected) view().focus(state.selected);
+  renderSide();
+}
+$("ui-toggle").onclick = () => { applyUi(ui === "pro" ? "pixel" : "pro"); save("tally.ui", ui); };
 function setMotion(paused) {
   state.paused = paused; world.setPaused(paused); document.body.classList.toggle("motion-paused",paused);
   $("motion").setAttribute("aria-pressed",paused); $("motion").innerHTML = paused ? '▶ <span>Motion</span>' : 'Ⅱ <span>Motion</span>';
@@ -262,7 +297,7 @@ motionPreference.addEventListener("change", (e) => { if (e.matches) setMotion(tr
 $("detail").addEventListener("click", async (e) => {
   const id = e.target.closest("button")?.id;
   if (id === "close-detail") { const key = state.selected; world.select(null); [...$("roster").querySelectorAll("button")].find((b) => b.dataset.key === key)?.focus({preventScroll:true}); }
-  if (id === "focus-agent") world.focus(state.selected);
+  if (id === "focus-agent") view().focus(state.selected);
   if (id === "copy-path") {
     const session = state.visible.find((s) => s.key === state.selected);
     if (!session?.cwd) return;
@@ -291,7 +326,8 @@ addEventListener("keydown", (e) => {
   if (e.key === "Escape") { if (typing) { e.target.blur(); return; } $("close-detail")?.click(); }
   if (typing) return;
   if (e.key === "/") { e.preventDefault(); $("search").focus(); }
-  if (e.key.toLowerCase() === "f") world.recenter();
+  if (e.key.toLowerCase() === "f") view().recenter();
+  if (e.key.toLowerCase() === "u") $("ui-toggle").click();
   if (e.key === "?") $("help").showModal();
 });
 setInterval(() => {
@@ -305,4 +341,4 @@ setInterval(() => {
 $("logo-bot").getContext("2d").drawImage(robotSprite({provider:"claude",legs:"stand",arms:false,eyes:"open",chest:"#a0e4b5"}),0,0);
 // Canvas text never triggers @font-face loading; request the pixel font explicitly and redraw once it arrives.
 document.fonts.load('10px "Press Start 2P"').then(() => { world.dirty = true; }).catch(() => {});
-setMotion(state.paused); renderFilters(); start();
+setMotion(state.paused); applyUi(ui); renderFilters(); start();

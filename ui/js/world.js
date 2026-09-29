@@ -485,7 +485,8 @@ export class World {
 
   frame(ts) {
     requestAnimationFrame((n) => this.frame(n));
-    if (document.hidden) { this.last = ts; return; }
+    // Skip work while the page is hidden or the canvas is not displayed (pro interface).
+    if (document.hidden || !this.canvas.offsetParent) { this.last = ts; return; }
     if (ts - this.last < 1000 / 30) return;
     const dt = Math.min(0.1, (ts - this.last) / 1000);
     this.last = ts;

@@ -109,3 +109,31 @@ test('each project remains a separate island with all seven stations', () => {
   assert.equal(islands, world.projectOrder.length);
   for (const project of world.projects.values()) assert.equal(Object.keys(project.stations).length, 7);
 });
+
+// ---------------------------------------------------------------- pro workspace board
+import { groupProjects, timelineTicks, eventTone, TIMELINE_MS } from '../ui/js/board.js';
+
+test('board puts projects that need you first and keeps sub-agents under their parent', () => {
+  const s = (key, status, other = {}) => ({ ...session(key, status, 0, other), toolCalls: 0, events: [], stations: [0,0,0,0,0,0] });
+  const groups = groupProjects([
+    s('busy', 'working', { project: 'a', cwd: '/a' }),
+    s('child', 'working', { project: 'b', cwd: '/b', parent: 'parent' }),
+    s('parent', 'waiting', { project: 'b', cwd: '/b' }),
+    s('other', 'idle', { project: 'b', cwd: '/b' }),
+    s('approval', 'blocked', { project: 'c', cwd: '/c' }),
+  ]);
+  assert.deepEqual(groups.map(g => g.name), ['c', 'b', 'a']);
+  assert.deepEqual(groups[1].rows.map(r => [r.session.key, r.depth]), [['parent', 0], ['child', 1], ['other', 0]]);
+});
+
+test('timeline keeps only events from the last 30 minutes, placed by time', () => {
+  const events = [
+    { ts: now - TIMELINE_MS - 1, kind: 'tool', station: 'forge' },
+    { ts: now - TIMELINE_MS / 2, kind: 'tool', station: 'terminal' },
+    { ts: now, kind: 'think' },
+    { ts: now - 1000, kind: 'system' },
+  ];
+  const ticks = timelineTicks(events, now);
+  assert.deepEqual(ticks.map(t => [Math.round(t.left), t.tone]), [[50, 'terminal'], [100, 'hub']]);
+  assert.equal(eventTone({ kind: 'user' }), 'user');
+});
