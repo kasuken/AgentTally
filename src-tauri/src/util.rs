@@ -252,6 +252,6 @@ mod tests {
     #[test]
     fn shortens() {
         assert_eq!(short_path("C:\\a\\b\\c.rs"), "b/c.rs");
-        assert_eq!(project_name("C:\\_GITHUB_\\LearnStack"), "LearnStack");
+        assert_eq!(project_name("C:\\code\\shop-api"), "shop-api");
     }
 }

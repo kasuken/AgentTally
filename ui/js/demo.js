@@ -12,13 +12,13 @@ const TOOLS = {
 const SEED = [
   { provider: "claude", project: "AgentTally", title: "Agent activity monitor dashboard", model: "claude-opus-5-5", status: "working" },
   { provider: "claude", project: "AgentTally", title: "Explore log formats", model: "claude-haiku-4-5", status: "working", parentIdx: 0 },
-  { provider: "codex", project: "business-os", title: "Weekly standup draft", model: "gpt-6-luna", status: "working" },
-  { provider: "copilot", project: "LearnStack", title: "Stripe webhook isolation", model: "claude-sonnet-5-5", status: "blocked" },
-  { provider: "vscode", project: "LearnStack", title: "Changelog request for updates", model: "GPT-6 Luna", status: "waiting" },
-  { provider: "claude", project: "Brainy", title: "Account deletion flow", model: "claude-opus-5-5", status: "working" },
-  { provider: "gemini", project: "casegrid", title: "Release notes for 0.0.1", model: "gemini-3-pro", status: "idle" },
+  { provider: "codex", project: "docs-site", title: "Weekly release notes", model: "gpt-6-luna", status: "working" },
+  { provider: "copilot", project: "shop-api", title: "Payment webhook retries", model: "claude-sonnet-5-5", status: "blocked" },
+  { provider: "vscode", project: "shop-api", title: "Changelog for v1.3", model: "GPT-6 Luna", status: "waiting" },
+  { provider: "claude", project: "notes-app", title: "Account deletion flow", model: "claude-opus-5-5", status: "working" },
+  { provider: "gemini", project: "game-engine", title: "Shader hot reload", model: "gemini-3-pro", status: "idle" },
   { provider: "antigravity", project: "antigravity", title: "Antigravity conversation", status: "sleeping" },
-  { provider: "copilot", project: "casegrid", title: "Azure static web app", model: "gpt-6-sol", status: "offline" },
+  { provider: "copilot", project: "game-engine", title: "Static site deploy", model: "gpt-6-sol", status: "offline" },
   { provider: "codex", project: "website", title: "Blog post images", model: "gpt-6-luna", status: "working" },
 ];
 
@@ -32,7 +32,7 @@ export function createDemo() {
     provider: s.provider,
     title: s.title,
     project: s.project,
-    cwd: `C:\\_GITHUB_\\${s.project}`,
+    cwd: `C:\\code\\${s.project}`,
     model: s.model || null,
     branch: i % 3 ? "main" : "feature/hex-world",
     client: null,

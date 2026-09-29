@@ -186,8 +186,8 @@ mod tests {
     #[test]
     fn strips_file_links() {
         assert_eq!(
-            strip_links("Reading [](file:///c%3A/_GITHUB_/LearnStack/version.json)"),
-            "Reading LearnStack/version.json"
+            strip_links("Reading [](file:///c%3A/code/shop-api/version.json)"),
+            "Reading shop-api/version.json"
         );
         assert_eq!(strip_links("Ran [tests](cmd:x) now"), "Ran tests now");
     }

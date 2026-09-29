@@ -24,12 +24,16 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": "all",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
+      "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "See what your local AI coding agents are doing",
+    "longDescription": "AgentTally reads the local logs of Claude Code, Codex, GitHub Copilot, Gemini CLI and more, and shows every session as a 16-bit robot on a hex island per project."
   }
 }

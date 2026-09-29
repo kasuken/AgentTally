@@ -1,9 +1,56 @@
 # AgentTally
 
-A 16-bit hex world that shows what the AI coding agents on this machine are doing, live.
+A 16-bit hex world that shows what the AI coding agents on your machine are doing, live.
 
 Every agent session is a small robot. Every project is a hex island with a **Core** in the
-middle and six stations around it. Robots walk to the station that matches what they are doing:
+middle and six stations around it. Robots walk to the station that matches what their agent is
+doing right now, so one glance tells you who is reading code, who is editing, who is running
+commands, and who is waiting for **you**.
+
+![AgentTally showing seven project islands with robots at work](docs/screenshots/world.png)
+
+AgentTally only **reads** local log files. It never sends anything anywhere.
+
+## Install
+
+Download the latest version from the [Releases page](https://github.com/kasuken/AgentTally/releases/latest).
+
+| Platform | File |
+|---|---|
+| Windows 10/11 | `AgentTally_<version>_x64-setup.exe` (or the `.msi`) |
+| macOS, Apple Silicon | `AgentTally_<version>_aarch64.dmg` |
+| macOS, Intel | `AgentTally_<version>_x64.dmg` |
+| Linux | `AgentTally_<version>_amd64.AppImage`, `.deb` or `.rpm` |
+
+The builds are not code-signed yet, so your OS will warn you the first time.
+
+**Windows.** Run the `-setup.exe` installer. If SmartScreen says "Windows protected your PC",
+choose **More info → Run anyway**. The app uses the WebView2 runtime, which ships with Windows 11
+and is installed automatically on Windows 10 if missing.
+
+**macOS.** Open the `.dmg` and drag **AgentTally** into **Applications**. Because the app is not
+notarized, macOS may say it "is damaged" or "can't be opened". Remove the quarantine flag once:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/AgentTally.app
+```
+
+**Linux.** Either make the AppImage executable and run it:
+
+```bash
+chmod +x AgentTally_*_amd64.AppImage && ./AgentTally_*_amd64.AppImage
+```
+
+or install the package for your distribution:
+
+```bash
+sudo apt install ./AgentTally_*_amd64.deb        # Debian, Ubuntu
+sudo dnf install ./AgentTally-*.x86_64.rpm       # Fedora, RHEL
+```
+
+Then just start your agents as usual. Robots beam in as soon as a session writes to its log.
+
+## How it works
 
 | Station     | Activity                                   | Examples                                  |
 |-------------|--------------------------------------------|-------------------------------------------|
@@ -19,9 +66,12 @@ Robot bubbles: `…` thinking · yellow `!` finished its turn, **your turn** · 
 permission · `Zzz` sleeping. The chest light shows the status colour. Sub-agents are small drones
 that orbit their parent robot.
 
-## Supported agents
+Select a robot or a party card to follow it: the camera flies to it and the details window
+shows its project, branch, model, token usage and recent activity.
 
-AgentTally only **reads** local log files. It never sends anything anywhere.
+![Details of a session waiting for approval](docs/screenshots/details.png)
+
+### Supported agents
 
 | Agent | Where it reads | Detail |
 |---|---|---|
@@ -33,8 +83,9 @@ AgentTally only **reads** local log files. It never sends anything anywhere.
 | Antigravity | `~/.gemini/antigravity*/conversations/*` | presence only (binary format) |
 | OpenCode | `~/.local/share/opencode/opencode.db*` | presence only |
 
-`CLAUDE_CONFIG_DIR` and `CODEX_HOME` are respected. Sessions touched in the last 24 hours are
-tracked. The UI filters to LIVE / 1H / 6H / 24H.
+`<config>` is `%APPDATA%` on Windows, `~/Library/Application Support` on macOS and `~/.config`
+on Linux. `CLAUDE_CONFIG_DIR` and `CODEX_HOME` are respected. Sessions touched in the last
+24 hours are tracked; the UI filters to LIVE / 1H / 6H / 24H.
 
 ### How status is derived
 
@@ -44,30 +95,6 @@ tracked. The UI filters to LIVE / 1H / 6H / 24H.
   Copilot final `assistant.turn_end`) less than 20 minutes ago.
 - **Needs approval**: a permission or approval request is pending (Copilot CLI, Codex).
 - **Idle / Sleeping**: quiet for 20 minutes / 3 hours. **Offline**: the session was shut down.
-
-## Run it
-
-Requirements: Rust (stable), Node 18+, and on Windows the WebView2 runtime (bundled with Windows 11).
-
-```bash
-npm install
-npm run dev        # desktop app with hot reload of the Rust side
-npm run build      # release build + installer in src-tauri/target/release/bundle
-```
-
-UI-only preview in a browser, without Tauri:
-
-```bash
-npm run preview    # http://localhost:5178/?demo  simulated agents
-                   # http://localhost:5178/?live  real logs via the debug binary (cargo build first)
-```
-
-Debug the log parsers without the UI:
-
-```bash
-cd src-tauri && cargo run -- --dump    # prints one snapshot as JSON
-cargo test
-```
 
 ## Controls
 
@@ -93,22 +120,64 @@ the world, party list, and world log together.
 
 The source badge explicitly distinguishes **DEMO**, **LIVE**, and **RECONNECTING**.
 Interrupted updates preserve the last snapshot, show a warning, and retry automatically.
-Status is inferred from log activity; Antigravity and OpenCode expose file activity only.
 
-## Verification
+The layout adapts to smaller windows, down to a narrow side-by-side view and a phone-sized
+single column:
+
+<img src="docs/screenshots/compact.png" alt="AgentTally in a narrow window" width="460" />
+
+## Build from source
+
+Requirements: [Rust](https://rustup.rs) (stable), Node 18+, and the
+[Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS (WebView2 on Windows,
+Xcode command line tools on macOS, `webkit2gtk-4.1` and friends on Linux).
+
+```bash
+git clone https://github.com/kasuken/AgentTally.git
+cd AgentTally
+npm install
+npm run dev        # desktop app in development mode
+npm run build      # release build + installers in src-tauri/target/release/bundle
+```
+
+UI-only preview in a browser, without Tauri:
+
+```bash
+npm run preview    # http://localhost:5178/?demo  simulated agents
+                   # http://localhost:5178/?live  real logs via the debug binary (cargo build first)
+```
+
+Debug the log parsers without the UI:
+
+```bash
+cd src-tauri && cargo run -- --dump    # prints one snapshot as JSON
+```
+
+### Tests
 
 ```bash
 npm test           # filters, attention ordering, map fit, zoom, and paused motion
 cargo test --manifest-path src-tauri/Cargo.toml
-npm run build
 ```
 
 For browser recovery checks without reading real agent logs, run
 `node tests/fixture-server.mjs <absolute-mode-file>` and open
-`http://localhost:5179/?live` (set `PORT` to use another port). Put `ready`, `error`, or `empty` in the mode file to exercise
-the corresponding snapshot state. This test fixture uses simulated sessions.
+`http://localhost:5179/?live` (set `PORT` to use another port). Put `ready`, `error`, or
+`empty` in the mode file to exercise the corresponding snapshot state. This test fixture uses
+simulated sessions.
 
-## Layout
+### Releasing
+
+Pushing a version tag builds installers for Windows, Linux, and macOS (Apple Silicon and Intel)
+with GitHub Actions and publishes them as a GitHub release:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+Bump `version` in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json` first.
+
+## Project layout
 
 ```
 src-tauri/src/
@@ -124,7 +193,10 @@ ui/
   js/main.js        data source, HUD, roster, logs
   js/selectors.js   time, project, provider, search, status, and sorting rules
   js/demo.js        simulated data for ?demo
+.github/workflows/  CI tests and the cross-platform release build
 ```
+
+## Credits
 
 Inspired by pixel-agent visualizers such as
 [pixel-agents-standalone](https://github.com/rolandal/pixel-agents-standalone),
