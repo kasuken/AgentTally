@@ -1,12 +1,29 @@
-# AgentTally v0.1.1
+# AgentTally v0.2.0
 
-## A clearer, calmer project world
+## A Pro view, next to the pixel world
 
-This release makes project islands and their workstations easier to recognize. It adds distinct building silhouettes and furniture, clearer trees, quieter terrain and ocean textures, separated island coastlines, and a station guide with enlarged artwork. The radar station now has a broad satellite dish, receiver arm, mast, and visible radio waves.
+AgentTally now has two interfaces over the same data. The 16-bit hex world stays the default; press **Pro view** in the top bar (or <kbd>U</kbd>) for a calm workspace dashboard:
 
-The map fits around its controls and station guide, project names remain legible when zoomed out, and approval or completed-turn sessions stand out more clearly in the party list.
+- One panel per project, with approvals and completed turns first.
+- One row per session: status, agent, current activity, a **30-minute activity timeline** coloured by what the agent was doing (think, read, edit, run, web, plan), tool mix, tool count and last seen.
+- Sub-agents indented under their parent session.
+- Search, filters, sorting, session details and the activity log work the same in both views. The selected session and your choice of view are kept.
 
-**Supported agents:** Claude Code, Codex, GitHub Copilot CLI, GitHub Copilot Chat (VS Code, Insiders, Cursor, VSCodium), Gemini CLI, plus activity-only support for Antigravity and OpenCode. AgentTally only reads local log files and never sends anything anywhere.
+![The Pro workspace view](https://raw.githubusercontent.com/kasuken/AgentTally/main/docs/screenshots/pro.png)
+
+## Better Antigravity support
+
+- Each Antigravity conversation now appears **once**. Previously its database and journal files (`.db`, `.db-wal`, `.db-shm`) each showed up as a separate session.
+- Sessions show the conversation **title**, the real **project folder** and the actual **run status** (running, your turn, stopped), read from Antigravity's conversation summaries. Sub-agent conversations appear under their parent, and the prompts you typed in the CLI show up in the activity log.
+
+## Fixes
+
+- A project used by several agents (for example Claude Code and Copilot Chat in VS Code) now lands on one island instead of two.
+- Project paths from file links keep their leading `/` on macOS and Linux.
+- OpenCode no longer risks showing the same session twice.
+- Also includes everything from v0.1.1: clearer island buildings, separated coastlines and the station guide.
+
+**Supported agents:** Claude Code, Codex, GitHub Copilot CLI, GitHub Copilot Chat (VS Code, Insiders, Cursor, VSCodium), Gemini CLI, Antigravity, plus activity-only support for OpenCode. AgentTally only reads local log files and never sends anything anywhere.
 
 ## Downloads
 
