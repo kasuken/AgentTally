@@ -3,7 +3,7 @@
 
 import { providerMeta } from "./meta.js";
 
-export const HEX = { w: 34, h: 36, cap: 9, side: 6 };
+export const HEX = { w: 40, h: 44, cap: 11, side: 6 };
 HEX.row = HEX.h - HEX.cap; // vertical distance between hex rows
 
 const OUTLINE = "#161827";
@@ -93,13 +93,13 @@ export function robotSprite(opts) {
 // ---------------------------------------------------------------- tiles
 
 export const TERRAIN = {
-  grass:  { top: "#5fa844", hi: "#7cc255", lo: "#468a33", side: "#6b4a2b", side2: "#4b321d" },
-  meadow: { top: "#6db34a", hi: "#94d162", lo: "#529639", side: "#6b4a2b", side2: "#4b321d" },
+  grass:  { top: "#629b62", hi: "#88b879", lo: "#558757", side: "#947251", side2: "#594635" },
+  meadow: { top: "#70a66a", hi: "#9bc780", lo: "#63955e", side: "#947251", side2: "#594635" },
   sand:   { top: "#dcc47e", hi: "#efdca0", lo: "#bfa663", side: "#8d6e3f", side2: "#5e4826" },
   stone:  { top: "#8d93a6", hi: "#a9afc0", lo: "#6f7588", side: "#4e5366", side2: "#363a4a" },
-  floor:  { top: "#5d6480", hi: "#7a82a0", lo: "#474d66", side: "#3a3f55", side2: "#262a3a" },
-  core:   { top: "#6c5a9e", hi: "#8b78c2", lo: "#54457d", side: "#3a3f55", side2: "#262a3a" },
-  water:  { top: "#2e6db4", hi: "#5596dc", lo: "#255a96", side: "#1d467a", side2: "#16365f" },
+  floor:  { top: "#768591", hi: "#98a6ac", lo: "#687985", side: "#475865", side2: "#304553" },
+  core:   { top: "#837caa", hi: "#a79bc9", lo: "#706995", side: "#50516c", side2: "#353b53" },
+  water:  { top: "#193e56", hi: "#26576c", lo: "#193e56", side: "#193e56", side2: "#193e56" },
 };
 
 /** Half-width of the hex at row y (pointy-top). */
@@ -152,17 +152,20 @@ export function tileSprite(kind, seed = 0) {
     for (let x = w / 2 - half; x < w / 2 + half; x++) {
       const r = hash(x, y, seed % 4 + kind.length);
       if (kind === "floor" || kind === "core") {
-        if ((x + y) % 8 === 0 && y % 4 === 0) { g.fillStyle = t.hi; g.fillRect(x, y, 1, 1); }
-        if (y % 9 === 4) { g.fillStyle = t.lo; g.fillRect(x, y, 1, 1); }
-      } else if (r < 0.07) {
+        if (y % 12 === 4 || (x + (Math.floor(y / 12) % 2) * 10) % 20 === 0) {
+          g.fillStyle = t.lo; g.fillRect(x, y, 1, 1);
+        }
+      } else if (kind === "water") {
+        if (y % 13 === 0 && x > 12 && x < 19) { g.fillStyle = t.hi; g.fillRect(x, y, 1, 1); }
+      } else if (r < 0.014) {
         g.fillStyle = t.hi; g.fillRect(x, y, 1, 1);
-      } else if (r > 0.92) {
+      } else if (r > 0.986) {
         g.fillStyle = t.lo; g.fillRect(x, y, 1, 1);
       }
     }
   }
   // rim light on the upper edges, shadow on the lower ones
-  for (let y = 0; y < h; y++) {
+  for (let y = 0; !flat && y < h; y++) {
     const half = hexHalf(y);
     g.fillStyle = y < h / 2 ? t.hi : t.lo;
     g.fillRect(w / 2 - half, y, 1, 1);
@@ -190,13 +193,17 @@ export function drawTree(g, x, y, v) {
   const dark = v > 0.5 ? "#2f6b2f" : "#2c5f3a";
   const mid = v > 0.5 ? "#3f8f3a" : "#3b7d4b";
   const lit = v > 0.5 ? "#63b54b" : "#5aa66a";
-  px(g, x - 1, y - 4, 3, 5, "#5a3a20");
-  px(g, x - 5, y - 12, 11, 8, OUTLINE);
-  px(g, x - 4, y - 15, 9, 12, OUTLINE);
-  px(g, x - 4, y - 12, 9, 7, dark);
-  px(g, x - 3, y - 14, 7, 10, mid);
-  px(g, x - 2, y - 13, 3, 3, lit);
-  px(g, x + 1, y - 10, 2, 2, lit);
+  px(g, x - 6, y, 14, 3, "rgba(22,40,36,0.18)");
+  box(g, x - 2, y - 7, 5, 9, "#946448");
+  px(g, x - 1, y - 5, 1, 5, "#c49262");
+  px(g, x - 7, y - 16, 15, 9, OUTLINE);
+  px(g, x - 5, y - 20, 11, 16, OUTLINE);
+  px(g, x - 8, y - 13, 17, 6, OUTLINE);
+  px(g, x - 6, y - 16, 13, 9, dark);
+  px(g, x - 4, y - 19, 9, 13, mid);
+  px(g, x - 7, y - 12, 7, 5, mid);
+  px(g, x - 3, y - 18, 5, 3, lit);
+  px(g, x - 5, y - 14, 4, 3, lit);
 }
 
 export function drawRock(g, x, y) {
@@ -218,6 +225,8 @@ export function drawFlowers(g, x, y, v) {
 // (x, y) is the centre of the hex top. `t` is time in seconds, `on` = in use.
 
 export function drawBuilding(g, station, x, y, t, on, accent) {
+  // A shared contact shadow anchors each object to the paving.
+  px(g, x - 13, y + 1, 27, 3, "rgba(22,24,39,0.22)");
   switch (station) {
     case "hub": return drawCore(g, x, y, t, on, accent);
     case "library": return drawLibrary(g, x, y, t, on);
@@ -235,6 +244,8 @@ function drawCore(g, x, y, t, on, accent = "#59f3ff") {
   px(g, x - 10, y - 3, 21, 5, OUTLINE);
   px(g, x - 9, y - 2, 19, 3, "#8b78c2");
   px(g, x - 9, y, 19, 1, "#54457d");
+  px(g, x - 12, y + 2, 25, 2, "#cec2ec");
+  px(g, x - 10, y + 4, 21, 1, "#66588b");
   // pillar
   box(g, x - 5, y - 17, 11, 15, "#b8b0dc");
   px(g, x - 3, y - 15, 2, 11, "#dcd6f5");
@@ -244,15 +255,15 @@ function drawCore(g, x, y, t, on, accent = "#59f3ff") {
   // crystal
   const cy = y - 24 - Math.round(Math.sin(t * 2) * 1.5);
   const cc = on ? accent : "#7f8cc0";
-  px(g, x, cy - 4, 1, 1, OUTLINE);
-  px(g, x - 1, cy - 3, 3, 1, OUTLINE);
-  px(g, x - 2, cy - 2, 5, 4, OUTLINE);
-  px(g, x - 1, cy + 2, 3, 1, OUTLINE);
-  px(g, x, cy + 3, 1, 1, OUTLINE);
-  px(g, x, cy - 3, 1, 1, cc);
-  px(g, x - 1, cy - 2, 3, 4, cc);
-  px(g, x, cy + 2, 1, 1, cc);
-  px(g, x - 1, cy - 2, 1, 2, "#ffffff");
+  for (let row = -5; row <= 5; row++) {
+    const half = Math.min(3, 5 - Math.abs(row));
+    px(g, x - half, cy + row, half * 2 + 1, 1, OUTLINE);
+    if (half) {
+      px(g, x - half + 1, cy + row, half, 1, cc);
+      if (half > 1) px(g, x + 1, cy + row, half - 1, 1, "#4593af");
+    }
+  }
+  px(g, x - 1, cy - 2, 1, 4, "#eaffff");
   if (on) {
     // light rays
     const r = 5 + Math.round(pulse * 3);
@@ -263,24 +274,29 @@ function drawCore(g, x, y, t, on, accent = "#59f3ff") {
 }
 
 function drawLibrary(g, x, y, t, on) {
-  // walls
-  box(g, x - 11, y - 13, 22, 14, "#e2d2a8");
-  px(g, x - 10, y - 1, 20, 1, "#b9a57a");
-  // roof (stepped)
+  // Blue gabled roof, warm walls, and a broad two-tier bookshelf.
+  box(g, x - 13, y - 17, 27, 19, "#eadbb5");
+  px(g, x + 10, y - 16, 3, 17, "#b8a47e");
   for (let i = 0; i < 6; i++) {
-    px(g, x - 13 + i * 2, y - 14 - i * 2, 26 - i * 4, 2, OUTLINE);
-    px(g, x - 12 + i * 2, y - 14 - i * 2, 24 - i * 4, 1, i % 2 ? "#3b5bb0" : "#4d70cc");
+    px(g, x - 15 + i * 2, y - 18 - i * 2, 31 - i * 4, 2, OUTLINE);
+    px(g, x - 14 + i * 2, y - 18 - i * 2, 29 - i * 4, 1, "#739ddb");
+    px(g, x - 13 + i * 2, y - 17 - i * 2, 27 - i * 4, 1, "#4166a5");
   }
-  // shelf window with book spines
-  box(g, x - 9, y - 11, 10, 8, "#5a3a20");
-  const spines = ["#e94f4f", "#4fb3e9", "#f2c14e", "#6fcf6f", "#b07cf0", "#e98a4f", "#4fe9c5", "#ffffff"];
-  for (let i = 0; i < 8; i++) {
-    const hgt = 3 + ((i * 7) % 3);
-    px(g, x - 8 + i, y - 4 - hgt, 1, hgt, spines[i]);
+  box(g, x - 11, y - 15, 14, 14, "#56402f");
+  const spines = ["#ed8667", "#87c6d6", "#f6d883", "#b3bc80"];
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0; i < 4; i++) {
+      px(g, x - 10 + i * 3, y - 14 + row * 6, 2, 4, spines[(i + row) % 4]);
+      px(g, x - 10 + i * 3, y - 13 + row * 6, 1, 1, "#fff0cc");
+    }
+    px(g, x - 10, y - 10 + row * 6, 12, 1, "#b88852");
   }
-  // door
-  box(g, x + 3, y - 9, 6, 10, "#8a5a2b");
-  px(g, x + 7, y - 5, 1, 1, "#ffd166");
+  box(g, x + 5, y - 12, 6, 14, "#775335");
+  px(g, x + 8, y - 5, 1, 1, "#ffe1a0");
+  // Open-book emblem, readable even while the station is inactive.
+  box(g, x - 4, y - 23, 9, 5, "#fff4d6");
+  px(g, x, y - 22, 1, 3, "#ab875a");
+  px(g, x + 4, y + 1, 9, 2, "#c7b994");
   if (on) {
     // floating page
     const k = (t * 1.5) % 1;
@@ -292,19 +308,23 @@ function drawLibrary(g, x, y, t, on) {
 
 function drawForge(g, x, y, t, on) {
   // chimney
-  box(g, x + 4, y - 24, 6, 12, "#6f6f80");
+  box(g, x + 5, y - 28, 7, 15, "#aa7360");
+  box(g, x + 4, y - 29, 9, 3, "#ddad83");
   // furnace body with bricks
-  box(g, x - 10, y - 15, 20, 16, "#8c8c9c");
+  box(g, x - 9, y - 18, 23, 20, "#b67d62");
+  px(g, x - 8, y - 17, 21, 2, "#e2ac7c");
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 4; c++) {
-      px(g, x - 9 + c * 5 + (r % 2 ? 2 : 0), y - 13 + r * 4, 1, 3, "#6f6f80");
+      px(g, x - 8 + c * 5 + (r % 2 ? 2 : 0), y - 13 + r * 4, 1, 3, "#885b4e");
     }
-    px(g, x - 9, y - 11 + r * 4, 18, 1, "#6f6f80");
+    px(g, x - 8, y - 11 + r * 4, 21, 1, "#885b4e");
   }
   // mouth
   const flick = on ? Math.floor(t * 10) % 3 : 0;
-  box(g, x - 6, y - 9, 10, 9, OUTLINE);
-  px(g, x - 5, y - 8, 8, 8, on ? ["#ff7a1a", "#ff9a2a", "#ffb347"][flick] : "#3a2a2a");
+  box(g, x - 4, y - 11, 13, 12, "#4b3030");
+  px(g, x - 2, y - 13, 9, 2, OUTLINE);
+  px(g, x - 3, y - 8, 11, 8, on ? ["#ff7a1a", "#ff9a2a", "#ffb347"][flick] : "#75413a");
+  px(g, x - 2, y - 2, 9, 2, on ? "#ffe7a3" : "#b86d4e");
   if (on) {
     px(g, x - 3, y - 6, 4, 5, "#ffe066");
     // smoke
@@ -321,9 +341,11 @@ function drawForge(g, x, y, t, on) {
     }
   }
   // anvil
-  px(g, x - 15, y - 3, 7, 2, OUTLINE);
-  px(g, x - 14, y - 3, 5, 1, "#b9c0d3");
-  px(g, x - 13, y - 1, 3, 2, OUTLINE);
+  px(g, x - 18, y - 7, 13, 3, OUTLINE);
+  px(g, x - 17, y - 7, 11, 1, "#e0e5e6");
+  px(g, x - 15, y - 6, 8, 2, "#8195a7");
+  px(g, x - 13, y - 4, 4, 4, OUTLINE);
+  px(g, x - 16, y, 10, 2, "#526574");
 }
 
 function drawTerminal(g, x, y, t, on) {
@@ -333,8 +355,10 @@ function drawTerminal(g, x, y, t, on) {
   px(g, x - 11, y - 2, 2, 3, OUTLINE);
   px(g, x + 9, y - 2, 2, 3, OUTLINE);
   // monitor
-  box(g, x - 9, y - 21, 18, 15, "#d6cfb8");
-  px(g, x - 7, y - 19, 14, 10, "#0b2413");
+  box(g, x - 11, y - 24, 22, 17, "#d6e0d9");
+  px(g, x - 10, y - 23, 20, 1, "#f2f5df");
+  px(g, x + 8, y - 22, 2, 14, "#8baba8");
+  px(g, x - 9, y - 22, 16, 12, "#143c39");
   px(g, x - 2, y - 6, 4, 1, "#9e977f");
   if (on) {
     const scroll = Math.floor(t * 6);
@@ -344,11 +368,16 @@ function drawTerminal(g, x, y, t, on) {
     }
     if (Math.floor(t * 3) % 2) px(g, x - 6 + 1 + ((scroll + 15) % 9), y - 12, 2, 1, "#b6ffcf");
   } else {
-    px(g, x - 6, y - 18, 2, 1, "#1f5a33");
+    // Keep a recognizable command prompt on the idle screen.
+    px(g, x - 7, y - 19, 1, 1, "#a3e1c4");
+    px(g, x - 6, y - 18, 1, 1, "#a3e1c4");
+    px(g, x - 7, y - 17, 1, 1, "#a3e1c4");
+    px(g, x - 3, y - 17, 4, 1, "#a3e1c4");
   }
   // keyboard
   px(g, x - 6, y - 7, 12, 2, OUTLINE);
   px(g, x - 5, y - 7, 10, 1, "#9e977f");
+  for (let i = 0; i < 5; i++) px(g, x - 5 + i * 2, y - 7, 1, 1, "#edf0d7");
   // server tower
   box(g, x + 11, y - 13, 6, 12, "#4a5068");
   px(g, x + 13, y - 11, 2, 1, on && Math.floor(t * 8) % 2 ? "#46e07a" : "#2a6040");
@@ -356,30 +385,45 @@ function drawTerminal(g, x, y, t, on) {
 }
 
 function drawRadar(g, x, y, t, on) {
-  // tower
-  for (let i = 0; i < 14; i++) {
-    px(g, x - 6 + Math.round(i * 0.4), y - i, 1, 1, OUTLINE);
-    px(g, x + 6 - Math.round(i * 0.4), y - i, 1, 1, OUTLINE);
-    if (i % 4 === 2) px(g, x - 5 + Math.round(i * 0.4), y - i, 11 - Math.round(i * 0.8), 1, "#6d7489");
+  // A substantial mast and foot support a broad, front-facing satellite dish.
+  box(g, x - 4, y - 17, 7, 17, "#8298aa");
+  px(g, x - 3, y - 15, 2, 13, "#c4d5df");
+  for (let i = 0; i < 8; i++) {
+    px(g, x - 4 - Math.floor(i / 2), y - 8 + i, 2, 2, "#526a80");
+    px(g, x + 2 + Math.floor(i / 2), y - 8 + i, 2, 2, "#526a80");
   }
-  px(g, x - 1, y - 18, 3, 5, OUTLINE);
-  // dish: 3 facings
-  const phase = on ? Math.floor(t * 2) % 4 : 1;
-  const face = [0, 1, 2, 1][phase];
-  const dx = [-4, 0, 4][face];
-  px(g, x - 8 + dx / 2, y - 25, 17 - Math.abs(dx), 7, OUTLINE);
-  px(g, x - 7 + dx / 2, y - 24, 15 - Math.abs(dx), 5, "#dfe3ee");
-  px(g, x - 7 + dx / 2, y - 21, 15 - Math.abs(dx), 2, "#aab1c4");
-  px(g, x + dx / 2, y - 29, 1, 5, OUTLINE);
-  px(g, x + dx / 2, y - 30, 1, 1, on && Math.floor(t * 4) % 2 ? "#ff5a6a" : "#7a2a33");
-  if (on) {
-    for (let i = 0; i < 3; i++) {
-      const k = (t * 1.2 + i / 3) % 1;
-      const r = 4 + Math.round(k * 12);
-      const col = k < 0.5 ? "#9ae6ff" : "#4f93d6";
-      px(g, x + dx / 2 + r, y - 31 - Math.round(r / 2), 1, 3, col);
-      px(g, x + dx / 2 - r, y - 31 - Math.round(r / 2), 1, 3, col);
+  box(g, x - 10, y - 1, 21, 4, "#8197a5");
+  px(g, x - 8, y, 17, 1, "#d0dce2");
+
+  // A continuous oval rim and a shaded bowl remain legible at map scale.
+  // Fixed orientation avoids the thin, ambiguous silhouette of an edge-on dish.
+  const widths = [9, 15, 19, 21, 23, 25, 25, 25, 25, 25, 23, 23, 21, 19, 15, 11, 5];
+  widths.forEach((w, row) => {
+    const left = x - 2 - Math.floor(w / 2);
+    px(g, left, y - 32 + row, w, 1, OUTLINE);
+    if (row > 0 && row < widths.length - 1) {
+      px(g, left + 1, y - 32 + row, w - 2, 1, row < 11 ? "#f0f4e9" : "#92abbc");
     }
+  });
+  const bowl = [7, 11, 15, 17, 17, 17, 15, 13, 9];
+  bowl.forEach((w, row) => {
+    px(g, x - 1 - Math.floor(w / 2), y - 28 + row, w, 1, row < 5 ? "#c3d8e0" : "#a3bece");
+  });
+  // Central receiver and a diagonal arm projecting beyond the rim.
+  box(g, x - 5, y - 25, 6, 6, "#6e94ad");
+  for (let i = 0; i < 11; i++) {
+    px(g, x - 3 + i, y - 23 - i, 3, 3, OUTLINE);
+    px(g, x - 2 + i, y - 23 - i, 1, 2, "#e2eced");
+  }
+  box(g, x + 6, y - 35, 5, 5, on ? "#ffe6a3" : "#e99767");
+  // Radio-wave brackets also identify the station while it is idle.
+  for (let i = 0; i < 2; i++) {
+    const sx = x + 13 + i * 4, sy = y - 35 - i * 3;
+    const lit = on && Math.floor(t * 3) % 2 === i;
+    const color = lit ? "#bcf7ff" : on ? "#73bedb" : "#7ba6bc";
+    px(g, sx, sy, 2, 2, color);
+    px(g, sx + 2, sy + 2, 2, 3 + i, color);
+    px(g, sx + 2, sy + 5 + i, 1, 2, color);
   }
 }
 
@@ -388,10 +432,14 @@ function drawTasks(g, x, y, t, on) {
   px(g, x - 11, y - 18, 2, 19, OUTLINE);
   px(g, x + 9, y - 18, 2, 19, OUTLINE);
   // board
-  box(g, x - 12, y - 20, 24, 14, "#9a6a35");
-  px(g, x - 11, y - 19, 22, 1, "#b88448");
+  box(g, x - 14, y - 23, 29, 18, "#bd915a");
+  px(g, x - 13, y - 22, 27, 2, "#f0c98b");
+  px(g, x - 12, y - 19, 25, 12, "#654e42");
+  // Three columns distinguish the planning board from a bookshelf.
+  px(g, x - 4, y - 18, 1, 10, "#a9845d");
+  px(g, x + 4, y - 18, 1, 10, "#a9845d");
   const notes = ["#ffe066", "#ff9ec7", "#9ae6ff", "#b6ffcf", "#ffe066"];
-  const pos = [[-9, -17], [-3, -16], [3, -17], [-6, -11], [1, -11]];
+  const pos = [[-10, -17], [-2, -17], [6, -17], [-10, -11], [-2, -11]];
   pos.forEach(([nx, ny], i) => {
     const wob = on && i === Math.floor(t * 2) % 5 ? -1 : 0;
     px(g, x + nx, y + ny + wob, 5, 4, notes[i]);
@@ -411,17 +459,23 @@ function drawDock(g, x, y, t, on) {
   pads.forEach(([dx, dy], i) => {
     px(g, x + dx - 6, y + dy - 1, 12, 4, OUTLINE);
     px(g, x + dx - 5, y + dy - 1, 10, 2, "#4a5068");
-    const glow = Math.floor(t * 2 + i) % 3 === 0;
+    const glow = on && Math.floor(t * 2 + i) % 3 === 0;
     px(g, x + dx - 4, y + dy, 8, 1, glow ? "#6fb6ff" : "#35507a");
   });
   // charging pylon
-  box(g, x - 2, y - 20, 5, 16, "#4a5068");
-  const lvl = Math.floor(t * 1.5) % 4;
-  for (let i = 0; i < 4; i++) px(g, x - 1, y - 7 - i * 3, 3, 2, i <= lvl ? "#46e07a" : "#244030");
+  box(g, x - 5, y - 22, 11, 18, "#9cbdcb");
+  px(g, x - 3, y - 24, 6, 2, "#dcecf0");
+  box(g, x - 3, y - 20, 7, 13, "#24463f");
+  const lvl = on ? Math.floor(t * 1.5) % 4 : 2;
+  for (let i = 0; i < 4; i++) px(g, x - 2, y - 10 - i * 3, 5, 2, i <= lvl ? "#95d9ac" : "#426454");
+  px(g, x - 9, y - 12, 4, 2, OUTLINE);
+  px(g, x - 10, y - 12, 2, 8, OUTLINE);
+  px(g, x + 6, y - 12, 4, 2, OUTLINE);
+  px(g, x + 9, y - 12, 2, 8, OUTLINE);
   // bolt
-  px(g, x, y - 25, 2, 2, "#ffd23f");
-  px(g, x - 1, y - 23, 2, 2, "#ffd23f");
-  px(g, x, y - 21, 1, 1, "#ffd23f");
+  px(g, x, y - 31, 3, 3, "#ffe39b");
+  px(g, x - 2, y - 28, 4, 2, "#ffd23f");
+  px(g, x - 1, y - 26, 2, 2, "#ffd23f");
 }
 
 // ---------------------------------------------------------------- held tools / bubbles

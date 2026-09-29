@@ -12,14 +12,14 @@
 :root {
   --bg: #0d1024;
   --ink: #f4f1ff;
-  --dim: #9aa0c8;
+  --dim: #adb9ce;
   --outline: #161827;
-  --win-top: #2a3780;
-  --win-bot: #141a4a;
-  --win-edge: #e9ecff;
-  --win-inner: #5a6bd0;
-  --field: #1a1f4a;
-  --field-edge: #3a4696;
+  --win-top: #263653;
+  --win-bot: #172238;
+  --win-edge: #a6bbcf;
+  --win-inner: #4c6582;
+  --field: #17253d;
+  --field-edge: #3e5574;
   --gold: #ffd23f;
   --green: #46e07a;
   --red: #ff5a6a;
@@ -198,7 +198,7 @@ button.counter:hover { background: #2a3478; }
 }
 .map-col { display: grid; grid-template-rows: minmax(0, 1fr) 132px; gap: 18px; min-width: 0; min-height: 0; }
 .map-win { overflow: hidden; }
-.map { position: absolute; inset: 0; overflow: hidden; background: #15305a; border-radius: 4px; }
+.map { position: absolute; inset: 0; overflow: hidden; background: #193e56; border-radius: 4px; }
 .map canvas { display: block; cursor: grab; touch-action: none; image-rendering: pixelated; }
 
 .map-top {
@@ -237,12 +237,13 @@ button.counter:hover { background: #2a3478; }
   text-shadow: 1px 1px 0 var(--outline);
 }
 .station-key {
-  display: flex; flex-wrap: nowrap; gap: 10px; white-space: nowrap; min-width: 0; overflow: hidden;
+  display: flex; align-items: center; flex-wrap: nowrap; gap: 12px; white-space: nowrap; min-width: 0;
   padding: 6px 8px 5px;
   background: rgba(22, 24, 39, 0.7);
   border: 2px solid var(--outline);
   border-radius: 4px;
 }
+.station-key .text-btn { pointer-events: auto; font-size: 7px; border-left: 1px solid var(--field-edge); padding: 3px 0 3px 12px; color: var(--ink); }
 .station-key b { font-weight: normal; color: var(--gold); }
 .hint { color: rgba(255, 255, 255, 0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; padding-bottom: 7px; }
 
@@ -331,16 +332,18 @@ button.counter:hover { background: #2a3478; }
   width: 100%;
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
-  gap: 3px 10px;
-  padding: 7px 8px 6px;
-  margin-bottom: 4px;
+  gap: 5px 10px;
+  padding: 10px 8px 9px;
+  margin-bottom: 6px;
   text-align: left;
-  background: none;
+  background: rgba(11, 20, 36, 0.24);
   border: 2px solid transparent;
   border-radius: 4px;
 }
 .card:hover { background: rgba(255, 255, 255, 0.06); }
 .card.sel { border-color: var(--gold); background: rgba(255, 210, 63, 0.08); }
+.card.blocked { border-left-color: var(--red); }
+.card.waiting { border-left-color: var(--gold); }
 .card img { width: 39px; height: 48px; image-rendering: pixelated; grid-row: span 4; }
 .card .name { display: flex; gap: 8px; align-items: center; min-width: 0; }
 .card .name b { font-weight: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -412,6 +415,11 @@ dialog::backdrop { background: rgba(8, 10, 28, 0.7); }
 .help-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 dialog h2 { font-size: 12px; color: var(--gold); text-transform: uppercase; text-shadow: 2px 2px 0 var(--outline); }
 dialog p { margin: 10px 0; }
+.station-atlas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 16px 0; }
+.station-card { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 8px 4px 12px; background: var(--field); border: 1px solid var(--field-edge); border-radius: 4px; }
+.station-card canvas { width: 88px; height: 96px; image-rendering: pixelated; max-width: 100%; object-fit: contain; }
+.station-card strong { font: 7px var(--pixel); color: #f4dfad; }
+.station-card span { font-size: 18px; color: var(--dim); }
 .help-status { padding: 2px 12px; border: 2px dashed rgba(255, 255, 255, 0.25); border-radius: 4px; }
 .help-status b { display: block; font: 8px var(--pixel); letter-spacing: 1px; margin-bottom: 3px; }
 .green { color: var(--green); } .red { color: var(--red); } .gold { color: var(--gold); }
@@ -459,6 +467,7 @@ dialog p { margin: 10px 0; }
   .detail { max-height: 480px; }
 }
 @media (max-width: 500px) {
+  .station-atlas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .map-top { flex-direction: column-reverse; align-items: stretch; }
   .map-controls { justify-content: flex-end; }
   .legend { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }

@@ -1,10 +1,14 @@
-A 16-bit hex world that shows what the AI coding agents on your machine are doing, live.
+# AgentTally v0.1.1
 
-Each agent session is a small robot. Each project is a hex island. Robots walk to the station that matches what their agent is doing: reading code, editing files, running commands, browsing, or planning.
+## A clearer, calmer project world
+
+This release makes project islands and their workstations easier to recognize. It adds distinct building silhouettes and furniture, clearer trees, quieter terrain and ocean textures, separated island coastlines, and a station guide with enlarged artwork. The radar station now has a broad satellite dish, receiver arm, mast, and visible radio waves.
+
+The map fits around its controls and station guide, project names remain legible when zoomed out, and approval or completed-turn sessions stand out more clearly in the party list.
 
 **Supported agents:** Claude Code, Codex, GitHub Copilot CLI, GitHub Copilot Chat (VS Code, Insiders, Cursor, VSCodium), Gemini CLI, plus activity-only support for Antigravity and OpenCode. AgentTally only reads local log files and never sends anything anywhere.
 
-### Downloads
+## Downloads
 
 | Platform | File |
 |---|---|

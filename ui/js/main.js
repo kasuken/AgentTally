@@ -1,6 +1,6 @@
 // Local-only dashboard controller. UI filters never change the underlying sessions.
 import { World } from "./world.js";
-import { robotSprite } from "./sprites.js";
+import { robotSprite, drawBuilding } from "./sprites.js";
 import { providerMeta, STATUS, STATIONS, KIND_ICON, ago, compact, describe, escapeHtml as esc } from "./meta.js";
 import { createDemo } from "./demo.js";
 import { WINDOWS, selectSessions, sortSessions, needsAttention, isResting, inWindow } from "./selectors.js";
@@ -271,6 +271,20 @@ $("detail").addEventListener("click", async (e) => {
   }
 });
 $("help-button").onclick = () => $("help").showModal(); $("close-help").onclick = () => $("help").close();
+$("station-guide").onclick = () => $("help").showModal();
+// Use the actual map artwork in the guide so every silhouette has a clear meaning.
+for (const [station, meta] of Object.entries(STATIONS)) {
+  const card = document.createElement("div");
+  card.className = "station-card";
+  const canvas = document.createElement("canvas");
+  canvas.width = 44; canvas.height = 48;
+  canvas.setAttribute("aria-hidden", "true");
+  drawBuilding(canvas.getContext("2d"), station, 22, 38, 0, false, "#59f3ff");
+  const label = document.createElement("strong"); label.textContent = meta.label;
+  const activity = document.createElement("span"); activity.textContent = meta.verb;
+  card.append(canvas, label, activity);
+  $("station-atlas").append(card);
+}
 addEventListener("keydown", (e) => {
   if ($("help").open || e.ctrlKey || e.metaKey || e.altKey) return;
   const typing = e.target.closest("input, textarea, select, [contenteditable=true]");

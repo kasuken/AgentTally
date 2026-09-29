@@ -48,7 +48,7 @@
           </div>
         </div>
         <div class="map-bottom">
-          <div class="station-key"><b id="world-count"></b><span>◆ Think</span><span>▤ Read</span><span>⚒ Edit</span><span>▶ Run</span><span>◎ Web</span><span>✦ Plan</span><span>⚡ Rest</span></div>
+          <div class="station-key"><b id="world-count"></b><button id="station-guide" class="text-btn" title="See the buildings and what they mean">Station guide ↗</button></div>
           <div class="hint">Drag to pan · Wheel to zoom · Click a robot</div>
         </div>
       </div>
@@ -83,6 +83,7 @@
 <dialog id="help" class="win">
   <div class="help-heading"><h2>Field guide</h2><button class="btn" id="close-help" aria-label="Close guide">✕</button></div>
   <p>Each island is a project. Robots travel between stations as agents read, edit, run commands, and think. Small drones are sub-agents.</p>
+  <div id="station-atlas" class="station-atlas" aria-label="Buildings and activities"></div>
   <div class="help-status">
     <p><b class="green">● WORKING</b> A recent turn or tool is running.</p>
     <p><b class="red">? NEEDS APPROVAL</b> Check the original app for a permission request.</p>

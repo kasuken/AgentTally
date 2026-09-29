@@ -37,11 +37,11 @@ function hash(a, b, s = 1) {
   return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
 }
 
-/** Deterministic spiral of flower centres at hex distance >= 4 from each other. */
+/** Leave one water hex between each island's two-hex land radius. */
 function flowerCentres(n, aspect = 1.6) {
   const out = [[0, 0]];
   const cands = [];
-  const R = 4 + Math.ceil(Math.sqrt(n)) * 4;
+  const R = 6 + Math.ceil(Math.sqrt(n)) * 6;
   for (let q = -R; q <= R; q++) {
     for (let r = -R; r <= R; r++) {
       const c = [q, r];
@@ -55,7 +55,7 @@ function flowerCentres(n, aspect = 1.6) {
   cands.sort((a, b) => a.score - b.score);
   for (const { c } of cands) {
     if (out.length >= n) break;
-    if (out.every((o) => hexDist(o, c) >= 4)) out.push(c);
+    if (out.every((o) => hexDist(o, c) >= 6)) out.push(c);
   }
   return out;
 }
@@ -172,18 +172,17 @@ export class World {
       this.projects.set(name, { name, index: i, centre: c, stations, cells });
       for (const { cell, station } of cells) land.set(cellKey(cell), { cell, kind: station === "hub" ? "core" : "floor", station });
     });
-    // Margin around each flower: grass with some sand and decoration.
+    // A compact coast keeps projects distinct instead of merging into one continent.
     for (const p of this.projects.values()) {
       const c = p.centre;
-      for (let dq = -3; dq <= 3; dq++) {
-        for (let dr = -3; dr <= 3; dr++) {
+      for (let dq = -2; dq <= 2; dq++) {
+        for (let dr = -2; dr <= 2; dr++) {
           const cell = [c[0] + dq, c[1] + dr];
           const d = hexDist(cell, c);
           const k = cellKey(cell);
-          if (d < 2 || d > 3 || land.has(k)) continue;
-          if (d === 3 && hash(cell[0], cell[1], 7) > 0.45) continue;
+          if (d !== 2 || land.has(k)) continue;
           const v = hash(cell[0], cell[1]);
-          land.set(k, { cell, kind: d === 3 ? "sand" : v > 0.55 ? "meadow" : "grass", decor: v });
+          land.set(k, { cell, kind: v > 0.78 ? "sand" : v > 0.4 ? "meadow" : "grass", decor: v });
         }
       }
     }
@@ -230,6 +229,33 @@ export class World {
       const seed = Math.floor(hash(t.cell[0], t.cell[1], 3) * 4);
       g.drawImage(tileSprite(t.kind, seed), Math.round(x - HEX.w / 2 - ox), Math.round(y - HEX.h / 2 - oy));
     }
+    // Thin surf follows only exposed hex edges; inland tile joins stay quiet.
+    const landKeys = new Set(this.cells.filter((c) => c.kind !== "water").map((c) => cellKey(c.cell)));
+    const hw = HEX.w / 2, hh = HEX.h / 2;
+    const coastEdges = [
+      [[hw, -hh + HEX.cap], [hw, hh - HEX.cap]],
+      [[0, -hh], [hw, -hh + HEX.cap]],
+      [[-hw, -hh + HEX.cap], [0, -hh]],
+      [[-hw, hh - HEX.cap], [-hw, -hh + HEX.cap]],
+      [[0, hh], [-hw, hh - HEX.cap]],
+      [[hw, hh - HEX.cap], [0, hh]],
+    ];
+    for (const { cell, kind } of sorted) {
+      if (kind === "water") continue;
+      const [x, y] = toPx(cell);
+      RING.forEach(({ dir }, i) => {
+        if (landKeys.has(cellKey([cell[0] + dir[0], cell[1] + dir[1]]))) return;
+        const [a, b] = coastEdges[i];
+        const surfX = [2, 1, -1, -2, -1, 1][i];
+        const surfY = [3, -1, -1, 3, HEX.side + 1, HEX.side + 1][i];
+        const steps = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
+        for (let k = 0; k <= steps; k++) {
+          if (k % 7 > 4) continue;
+          px(g, x - ox + a[0] + (b[0] - a[0]) * k / steps + surfX,
+            y - oy + a[1] + (b[1] - a[1]) * k / steps + surfY, 1, 1, "#548795");
+        }
+      });
+    }
     // Static decoration.
     for (const t of sorted) {
       if (t.decor === undefined) continue;
@@ -239,9 +265,9 @@ export class World {
       const v2 = hash(t.cell[0], t.cell[1], 11);
       if (t.kind === "sand") {
         if (v2 < 0.3) drawRock(g, lx + 4, ly + 4);
-      } else if (v2 < 0.42) {
+      } else if (v2 < 0.28) {
         drawTree(g, lx - 5, ly + 2, v);
-        if (v2 < 0.2) drawTree(g, lx + 7, ly + 7, 1 - v);
+        if (v2 < 0.08) drawTree(g, lx + 7, ly + 7, 1 - v);
       } else if (v2 < 0.6) {
         drawFlowers(g, lx, ly + 2, v);
       } else if (v2 < 0.68) {
@@ -255,19 +281,23 @@ export class World {
     if (!this.terrain) return;
     // Fit the islands, not the surrounding water ring; the ocean background fills the rest.
     const { minX, minY, maxX, maxY } = this.terrain.land || this.terrain;
+    // Keep island artwork clear of the source controls and the station guide.
+    const topInset = this.cw < 600 ? 86 : 62;
+    const bottomInset = 38;
     this.cam.x = (minX + maxX) / 2;
-    this.cam.y = (minY + maxY) / 2 + 4;
+    this.cam.y = (minY + maxY) / 2 + HEX.side / 2;
     this.cameraTarget = null;
     this.dirty = true;
     if (!this.userZoom) {
-      // One hex of margin; extra height for the robots' heads above the top row.
-      const w = maxX - minX + HEX.w * 1.25, h = maxY - minY + HEX.h * 1.9;
+      // Include the outer tile edges and cliffs; the inset above leaves room for controls.
+      const w = maxX - minX + HEX.w * 1.25, h = maxY - minY + HEX.h + HEX.side;
       // Integer scales keep pixels crisp; allow half steps when the world is big.
-      const fitted = Math.min(this.cw / w, this.ch / h);
+      const fitted = Math.min(this.cw / w, Math.max(1, this.ch - topInset - bottomInset) / h);
       const s = fitted >= 2 ? Math.floor(fitted) : fitted;
       this.scale = Math.max(0.1, Math.min(5, s));
       this.sizeBuffer();
     }
+    this.cam.y -= (topInset - bottomInset) / (2 * this.scale);
   }
 
   recenter() {
@@ -475,14 +505,14 @@ export class World {
     const ox = this.offX, oy = this.offY;
 
     // Ocean.
-    g.fillStyle = "#15305a";
+    g.fillStyle = TERRAIN.water.top;
     g.fillRect(0, 0, W, H);
     for (let y = ((oy % 12) + 12) % 12 - 12; y < H; y += 12) {
       for (let x = ((ox % 24) + 24) % 24 - 24; x < W; x += 24) {
         const wx = x - ox, wy = y - oy;
         const v = hash(Math.round(wx / 24), Math.round(wy / 12), 5);
         const shift = Math.round(Math.sin(t * 1.2 + v * 6) * 3);
-        g.fillStyle = v > 0.5 ? "#1e3f70" : "#1a386a";
+        g.fillStyle = v > 0.5 ? "#265269" : "#20485f";
         g.fillRect(x + shift + (Math.round(wy / 12) % 2 ? 12 : 0), y, 5, 1);
       }
     }
@@ -534,7 +564,7 @@ export class World {
     }
 
     if (this.night > 0) {
-      g.fillStyle = `rgba(12,10,60,${0.28 * this.night})`;
+      g.fillStyle = `rgba(12,10,60,${0.1 * this.night})`;
       g.fillRect(0, 0, W, H);
     }
 
@@ -610,7 +640,7 @@ export class World {
   }
 
   drawLabels(ctx, s, ox, oy) {
-    const fontPx = Math.min(14, Math.max(6 * this.dpr, Math.round(4 * s)));
+    const fontPx = Math.min(14 * this.dpr, Math.max(8 * this.dpr, Math.round(4 * s)));
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     // Project signs. When zoomed out they can collide: projects with working robots

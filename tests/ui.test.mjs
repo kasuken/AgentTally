@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { selectSessions, sortSessions, inWindow } from '../ui/js/selectors.js';
 import { World } from '../ui/js/world.js';
+import { HEX } from '../ui/js/sprites.js';
 const now = 100_000_000;
 const session = (key, status, age = 0, other = {}) => ({ key, status, lastTs: now - age, project: 'app', provider: 'codex', title: key, ...other });
 const filters = { hidden: new Set(), window: '6h', status: 'all', query: '', project: '' };
@@ -71,4 +72,40 @@ test('fit frames the islands, not the surrounding water ring', () => {
   world.fit();
   assert.equal(world.cam.x,0);
   assert.ok(world.scale >= 2, `scale ${world.scale} should use the land bounds`);
+});
+
+test('fit leaves the land clear of the map controls and station guide', () => {
+  for (const [cw, ch, top] of [[800, 400, 62], [390, 440, 86]]) {
+    const land = {minX:-100,minY:-50,maxX:100,maxY:50};
+    const world = Object.assign(Object.create(World.prototype), {terrain:{land},cam:{},cw,ch,userZoom:false,sizeBuffer(){}});
+    world.fit();
+    const screenTop = ch / 2 + (land.minY - HEX.h / 2 - world.cam.y) * world.scale;
+    const screenBottom = ch / 2 + (land.maxY + HEX.h / 2 + HEX.side - world.cam.y) * world.scale;
+    assert.ok(screenTop >= top - 0.01);
+    assert.ok(screenBottom <= ch - 38 + 0.01);
+  }
+});
+
+test('each project remains a separate island with all seven stations', () => {
+  const world = Object.assign(Object.create(World.prototype), {
+    projectOrder:Array.from({length:12}, (_, i) => `project-${i}`), projects:new Map(),
+    cw:1200,ch:700,userPan:true,renderTerrain(){},
+  });
+  world.layout();
+  const land = new Set(world.cells.filter(c => c.kind !== 'water').map(c => c.cell.join(',')));
+  let islands = 0;
+  while (land.size) {
+    islands++;
+    const pending = [land.values().next().value];
+    land.delete(pending[0]);
+    while (pending.length) {
+      const [q,r] = pending.pop().split(',').map(Number);
+      for (const [dq,dr] of [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]]) {
+        const key = `${q+dq},${r+dr}`;
+        if (land.delete(key)) pending.push(key);
+      }
+    }
+  }
+  assert.equal(islands, world.projectOrder.length);
+  for (const project of world.projects.values()) assert.equal(Object.keys(project.stations).length, 7);
 });
