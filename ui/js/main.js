@@ -223,7 +223,8 @@ function renderFilters() {
   for (const b of document.querySelectorAll("[data-status]")) { b.classList.toggle("on", b.dataset.status === state.status); b.setAttribute("aria-pressed", b.dataset.status === state.status); }
   for (const b of $("window-filter").children) { b.classList.toggle("on", b.dataset.w === state.window); b.setAttribute("aria-pressed", b.dataset.w === state.window); }
   $("reset-filters").hidden = !hasFilters();
-  $("world-count").textContent = `${new Set(state.visible.map(projectKey)).size} projects`;
+  const islands = new Set(state.visible.map(projectKey)).size;
+  $("world-count").textContent = `${islands} project${islands === 1 ? "" : "s"}`;
 }
 function hasFilters() { return !!(state.query || state.project || state.hidden.size || state.status !== "all" || state.window !== "6h"); }
 function renderEmpty() {

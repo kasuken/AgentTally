@@ -292,6 +292,8 @@ button.counter:hover { background: #2a3478; }
 .finder-row { flex: 1 1 40%; min-width: 0; }
 /* With details open, the party list keeps as much room as possible for cards. */
 .side:has(.detail:not([hidden])) .summary { display: none; }
+.finder:has(#reset-filters:not([hidden])) { flex-wrap: wrap; }
+.finder:has(#reset-filters:not([hidden])) .search { flex-basis: 100%; }
 .search {
   display: flex; align-items: center; gap: 8px;
   height: 32px; padding: 0 8px;
@@ -422,15 +424,27 @@ dialog p { margin: 10px 0; }
 }
 @media (max-width: 1250px) {
   .counter.stat { display: none; }
-  .station-key span:nth-of-type(n+5) { display: none; }
   .logo p #subtitle { display: none; }
 }
 @media (max-width: 1100px) {
   .topbar { gap: 12px; padding: 8px 12px 4px; }
+  .logo { flex: 0 1 auto; }
+  .logo h1 { font-size: 15px; }
   .layout { grid-template-columns: minmax(0, 1fr) 320px; gap: 12px; padding: 6px 12px 16px; }
   .map-col { gap: 12px; }
-  .counter { min-width: 72px; padding: 6px 6px 5px; }
+  /* Counters size to their labels instead of shrinking under them. */
+  .counters { gap: 6px; }
+  .counter { flex: none; min-width: 0; padding: 6px 7px 5px; }
+  .counter b { font-size: 13px; }
+  .counter .counter-top { font-size: 6px; letter-spacing: 0.5px; }
   .map-controls .btn span, .hint { display: none; }
+  .legend { gap: 4px; }
+  .chip { padding: 3px 6px 2px 4px; gap: 5px; }
+  .station-key { gap: 8px; letter-spacing: 0; }
+  /* Narrow party window: search on its own row, project filter + clear below. */
+  .finder { flex-wrap: wrap; }
+  .finder .search { flex-basis: 100%; }
+  .log li button { grid-template-columns: 40px minmax(80px, 150px) minmax(0, 1fr); gap: 8px; }
 }
 @media (max-width: 860px) {
   body { overflow: auto; }
