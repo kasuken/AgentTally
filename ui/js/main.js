@@ -127,6 +127,14 @@ function renderCounters() {
     b.title = `${label} in the selected time window and sources. Click to filter.`;
     html(b, `<span class="counter-top"><span class="dot" style="color:${color}"></span>${label}</span><span class="arrow" aria-hidden="true">↗</span><b style="color:${color}">${n}</b><small>${hint}</small>`);
   }
+  // Read-only totals next to the filter counters, as in a game HUD.
+  const stats = [["tools", "Tool calls", compact(v.reduce((a, s) => a + s.toolCalls, 0)), "#ffffff"], ["tokens", "Tokens", compact(v.reduce((a, s) => a + s.tokensIn + s.tokensOut, 0)), "#c7a8ff"]];
+  for (const [key, label, n, color] of stats) {
+    let d = $("counters").querySelector(`[data-stat="${key}"]`);
+    if (!d) { d = document.createElement("div"); d.dataset.stat = key; d.className = "counter stat"; $("counters").append(d); }
+    d.title = `${label} across sessions in the selected time window and sources`;
+    html(d, `<b style="color:${color}">${n}</b><span class="counter-top">${label}</span>`);
+  }
   document.title = `${approval + ready ? `(${approval + ready}) ` : ""}AgentTally`;
 }
 function renderLegend() {
@@ -159,7 +167,7 @@ function renderRoster() {
     b.className = `card ${s.status} ${s.key === state.selected ? "sel" : ""}`;
     b.setAttribute("aria-pressed", s.key === state.selected);
     b.title = `${s.title} · ${s.cwd || s.project}`;
-    html(b, `<img src="${portrait(s.provider,s.status)}" alt="" /><span class="name"><b>${s.parent ? "↳ " : ""}${esc(s.title)}</b></span><span class="meta"><span class="project">${esc(s.project)}</span>${time(s.lastTs)}</span><span class="doing">${esc(describe(s.current))}</span><span class="status-line" style="color:${st.color}"><span class="dot"></span>${statusLabel(s.status)}<span class="provider-name">${esc(m.name)}</span></span>`);
+    html(b, `<img src="${portrait(s.provider,s.status)}" alt="" /><span class="name"><span class="tag" style="background:${m.body}">${esc(m.short)}</span><b>${s.parent ? "↳ " : ""}${esc(s.title)}</b></span><span class="meta"><span class="project">${esc(s.project)}</span>${time(s.lastTs)}</span><span class="doing">${esc(describe(s.current))}</span><span class="status-line" style="color:${st.color}"><span class="dot"></span>${statusLabel(s.status)}<span class="provider-name">${esc(m.name)}</span></span>`);
   });
   if (!list.length) html($("roster"), '<li class="list-empty">No matching sessions.<br>Try another filter or clear your search.</li>');
 }
@@ -207,7 +215,7 @@ function renderLog() {
   reconcile($("world-log"), rows, (b,{s,e}) => {
     b.dataset.key = s.key;
     b.title = `${s.title}: ${describe(e)}`;
-    html(b, `${time(e.ts)}<span class="who" style="color:${providerMeta(s.provider).body}">${esc(s.project)}</span><span class="what">${e.kind === "tool" ? STATIONS[e.station]?.icon || "⚙" : KIND_ICON[e.kind] || "·"} ${esc(describe(e))}</span>`);
+    html(b, `${time(e.ts)}<span class="who" style="color:${providerMeta(s.provider).body}">${esc(providerMeta(s.provider).short)}@${esc(s.project)}</span><span class="what">${e.kind === "tool" ? STATIONS[e.station]?.icon || "⚙" : KIND_ICON[e.kind] || "·"} ${esc(describe(e))}</span>`);
   });
   if (!rows.length) html($("world-log"), '<li class="list-empty">Activity will appear here as your agents work.</li>');
 }

@@ -71,10 +71,12 @@ cargo test
 
 ## Controls
 
-The overview puts **Needs you** first: permission requests, then completed turns. Click an
-overview card or a status tab to filter. Overview counts always cover the selected time
-window and enabled providers; search, project, and status filters narrow the world,
-session list, and activity stream together.
+The screen is a 16-bit HUD: counters and the time window on top, the hex world as the main
+window (sources, map controls and the station key float over it), the world log below and the
+party list on the right. **Needs you** comes first: permission requests, then completed turns.
+Click a HUD counter or a party status tab to filter. Counters always cover the selected time
+window and enabled providers; search, project, and status filters (in the party window) narrow
+the world, party list, and world log together.
 
 - Search by session title, project, path, provider, client, or model. `/` focuses search.
 - Filter by project or provider. **Clear filters** restores all sources and the 6-hour window.
@@ -130,4 +132,4 @@ Inspired by pixel-agent visualizers such as
 [agentroom](https://github.com/liuyixin-louis/agentroom) and
 [agent-factory](https://github.com/kalmigs/agent-factory).
 
-Font: Press Start 2P (SIL Open Font License), bundled in `ui/fonts`.
+Fonts: Press Start 2P and VT323 (SIL Open Font License), bundled in `ui/fonts`.

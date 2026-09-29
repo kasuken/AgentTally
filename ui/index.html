@@ -1,39 +1,98 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><meta name="color-scheme" content="dark" /><title>AgentTally</title><link rel="stylesheet" href="style.css" /></head>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>AgentTally</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
 <body>
 <header class="topbar">
-  <div class="logo"><canvas id="logo-bot" width="13" height="16" aria-hidden="true"></canvas><div><h1>Agent<span>Tally</span></h1><p>Your local agent observatory</p></div></div>
-  <div class="connection"><span id="source-badge" class="source-badge">CONNECTING</span><span id="subtitle" role="status">Scanning local logs…</span></div>
-  <button class="btn" id="help-button" aria-label="Help and keyboard shortcuts">? <span>Guide</span></button>
-</header>
-<main>
-  <section class="overview" aria-label="Session overview"><div class="overview-title"><p class="eyebrow">MISSION CONTROL</p><h2>A little world.<br> A clear overview.</h2><p id="overview-summary">Finding your agents…</p></div><div class="counters" id="counters"></div></section>
-  <section class="toolbar" aria-label="Session filters">
-    <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Find a session, project, or agent…" aria-label="Search sessions" autocomplete="off" /><kbd>/</kbd></label>
-    <label class="project-select"><span class="sr-only">Project</span><select id="project-filter" aria-label="Project"><option value="">All projects</option></select></label>
-    <div class="seg" id="window-filter" role="group" aria-label="Time window"><button data-w="live" title="Active sessions and recent idle sessions">Live</button><button data-w="1h">1h</button><button data-w="6h">6h</button><button data-w="24h">24h</button></div>
-    <button class="text-btn" id="reset-filters" hidden>Clear filters</button>
-  </section>
-  <div class="provider-bar"><span class="eyebrow">SOURCES</span><div class="legend" id="legend"></div><span class="local-note">Local logs · read only</span></div>
-  <div id="connection-warning" class="connection-warning" role="status" hidden></div>
-  <div class="layout">
-    <section class="map-col" aria-label="Agent world and activity">
-      <div class="win world-panel">
-        <div class="panel-heading"><div><span class="live-dot"></span><h3>Agent world</h3><span class="muted" id="world-count"></span></div><div class="map-controls"><button class="btn" id="motion" aria-pressed="false" title="Pause animation; live data keeps updating">Ⅱ <span>Motion</span></button><button class="btn" id="zoom-out" aria-label="Zoom out">−</button><button class="btn" id="zoom-in" aria-label="Zoom in">+</button><button class="btn" id="recenter" title="Fit all projects (F)">⌖ <span>Fit</span></button></div></div>
-        <div class="map" id="map-wrap"><canvas id="world" role="img" aria-label="Animated project islands. Use the sessions list to inspect agents with a keyboard."></canvas><div class="empty" id="empty" hidden><div class="empty-dialog"><span class="empty-icon">◇</span><h3 id="empty-title">All quiet here</h3><p id="empty-message"></p><button class="btn" id="empty-reset">Reset filters</button></div></div><div class="hint">Drag to pan <span>·</span> Scroll to zoom <span>·</span> Select a robot</div></div>
-        <div class="station-key"><span>◆ Think</span><span>▤ Read</span><span>⚒ Edit</span><span>▶ Run</span><span>◎ Browse</span><span>✦ Plan</span><span>⚡ Rest</span></div>
-      </div>
-      <section class="log win"><div class="panel-heading"><div><h3>Activity stream</h3><span class="muted">Latest events · current filters</span></div></div><ol id="world-log"></ol></section>
-    </section>
-    <aside class="side" aria-label="Sessions">
-      <section class="win detail" id="detail" hidden aria-label="Selected session"></section>
-      <section class="win roster"><div class="panel-heading"><div><h3>Sessions <span id="party-count" class="count-badge"></span></h3></div><label><span class="sr-only">Sort sessions</span><select id="sort" aria-label="Sort sessions"><option value="attention">Needs you first</option><option value="recent">Recently active</option><option value="project">By project</option></select></label></div><div class="status-tabs" id="status-filter" role="group" aria-label="Session status"><button data-status="all">All</button><button data-status="attention">Needs you</button><button data-status="working">Working</button><button data-status="resting">At rest</button></div><ul id="roster"></ul></section>
-    </aside>
+  <div class="logo">
+    <canvas id="logo-bot" width="13" height="16" aria-hidden="true"></canvas>
+    <div>
+      <h1>AGENT<span>TALLY</span></h1>
+      <p><span id="source-badge" class="source-badge">CONNECTING</span> <span id="subtitle" role="status">Scanning local logs…</span></p>
+    </div>
   </div>
-  <footer><span>Status is inferred from local log activity.</span><span id="updated">Waiting for first scan</span></footer>
+  <div class="counters" id="counters" aria-label="Session overview"></div>
+  <div class="controls">
+    <div class="seg" id="window-filter" role="group" aria-label="Time window">
+      <button data-w="live" title="Active sessions and recent idle sessions">LIVE</button><button data-w="1h">1H</button><button data-w="6h">6H</button><button data-w="24h">24H</button>
+    </div>
+    <button class="btn" id="help-button" aria-label="Help and keyboard shortcuts" title="Guide (?)">?</button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="map-col" aria-label="Agent world and activity">
+    <div class="win map-win">
+      <div class="map" id="map-wrap">
+        <canvas id="world" role="img" aria-label="Animated project islands. Use the party list to inspect agents with a keyboard."></canvas>
+        <div class="map-top">
+          <div class="legend" id="legend" aria-label="Sources"></div>
+          <div class="map-controls">
+            <button class="btn" id="motion" aria-pressed="false" title="Pause animation; live data keeps updating">Ⅱ <span>Motion</span></button>
+            <button class="btn" id="zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
+            <button class="btn" id="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+            <button class="btn" id="recenter" title="Fit all projects (F)">⌖ <span>Fit</span></button>
+          </div>
+        </div>
+        <div id="connection-warning" class="connection-warning" role="status" hidden></div>
+        <div class="empty" id="empty" hidden>
+          <div class="win dialog">
+            <h2 id="empty-title">All quiet here</h2>
+            <p id="empty-message"></p>
+            <button class="btn" id="empty-reset">Reset filters</button>
+          </div>
+        </div>
+        <div class="map-bottom">
+          <div class="station-key"><b id="world-count"></b><span>◆ Think</span><span>▤ Read</span><span>⚒ Edit</span><span>▶ Run</span><span>◎ Web</span><span>✦ Plan</span><span>⚡ Rest</span></div>
+          <div class="hint">Drag to pan · Wheel to zoom · Click a robot</div>
+        </div>
+      </div>
+    </div>
+    <section class="log win" aria-label="Activity stream">
+      <div class="win-head"><h3>World log</h3><span id="updated" class="muted">Waiting for first scan</span></div>
+      <ol id="world-log"></ol>
+    </section>
+  </section>
+
+  <aside class="side" aria-label="Sessions">
+    <section class="win detail" id="detail" hidden aria-label="Selected session"></section>
+    <section class="win roster">
+      <div class="win-head">
+        <h3>Party <span id="party-count"></span></h3>
+        <label><span class="sr-only">Sort sessions</span><select id="sort" aria-label="Sort sessions"><option value="attention">Needs you first</option><option value="recent">Recently active</option><option value="project">By project</option></select></label>
+      </div>
+      <p id="overview-summary" class="summary">Finding your agents…</p>
+      <div class="finder">
+        <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Find a session, project, agent…" aria-label="Search sessions" autocomplete="off" /><kbd>/</kbd></label>
+        <div class="finder-row">
+          <label class="project-select"><span class="sr-only">Project</span><select id="project-filter" aria-label="Project"><option value="">All projects</option></select></label>
+          <button class="text-btn" id="reset-filters" hidden>Clear filters</button>
+        </div>
+      </div>
+      <div class="status-tabs" id="status-filter" role="group" aria-label="Session status"><button data-status="all">All</button><button data-status="attention">Needs you</button><button data-status="working">Working</button><button data-status="resting">At rest</button></div>
+      <ul id="roster"></ul>
+    </section>
+  </aside>
 </main>
-<dialog id="help"><div class="help-heading"><span class="eyebrow">FIELD GUIDE</span><button class="btn" id="close-help" aria-label="Close guide">✕</button></div><h2>Your agents, at a glance.</h2><p>Each island is a project. Robots travel between stations as agents read, edit, run commands, and think. Small drones are sub-agents.</p><div class="help-status"><p><b class="green">● Working</b> A recent turn or tool is running.</p><p><b class="red">? Needs approval</b> Check the original app for a permission request.</p><p><b class="gold">! Your turn</b> The agent has finished its turn.</p></div><p>Choose a session to read its latest activity. Filters apply to the map, sessions, and stream; overview counts stay scoped to your time window and enabled sources.</p><p>Live includes active sessions and idle sessions seen in the last 15 minutes. Active sessions stay visible in every time window. Antigravity and OpenCode report file activity only.</p><div class="shortcuts"><span><kbd>/</kbd> Search</span><span><kbd>F</kbd> Fit world</span><span><kbd>Esc</kbd> Close details</span><span><kbd>?</kbd> This guide</span></div><p class="muted">AgentTally reads local logs. Reply to agents and approve requests in their original applications. Motion can be paused independently of live updates.</p></dialog>
+
+<dialog id="help" class="win">
+  <div class="help-heading"><h2>Field guide</h2><button class="btn" id="close-help" aria-label="Close guide">✕</button></div>
+  <p>Each island is a project. Robots travel between stations as agents read, edit, run commands, and think. Small drones are sub-agents.</p>
+  <div class="help-status">
+    <p><b class="green">● WORKING</b> A recent turn or tool is running.</p>
+    <p><b class="red">? NEEDS APPROVAL</b> Check the original app for a permission request.</p>
+    <p><b class="gold">! YOUR TURN</b> The agent has finished its turn.</p>
+  </div>
+  <p>Choose a session to read its latest activity. Filters apply to the map, party list, and world log; the counters at the top stay scoped to your time window and enabled sources.</p>
+  <p>LIVE includes active sessions and idle sessions seen in the last 15 minutes. Active sessions stay visible in every time window. Antigravity and OpenCode report file activity only.</p>
+  <div class="shortcuts"><span><kbd>/</kbd> Search</span><span><kbd>F</kbd> Fit world</span><span><kbd>Esc</kbd> Close details</span><span><kbd>?</kbd> This guide</span></div>
+  <p class="muted">AgentTally reads local logs. Reply to agents and approve requests in their original applications. Motion can be paused independently of live updates.</p>
+</dialog>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>
