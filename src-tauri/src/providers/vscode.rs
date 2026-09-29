@@ -152,15 +152,18 @@ pub fn strip_links(msg: &str) -> String {
     out
 }
 
-fn decode_uri(uri: &str) -> String {
-    let path = uri.trim_start_matches("file:///").split('#').next().unwrap_or(uri);
-    let bytes = path.as_bytes();
+/// Percent-decodes a `file://` URI into a path: `file:///c%3A/x` → `c:/x`,
+/// `file:///home/me/x` → `/home/me/x`.
+pub fn decode_uri(uri: &str) -> String {
+    let rest = uri.strip_prefix("file://").unwrap_or(uri);
+    let bytes = rest.split(['#', '?']).next().unwrap_or(rest).as_bytes();
+    let hex = |b: u8| (b as char).to_digit(16).map(|d| d as u8);
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(b) = u8::from_str_radix(&path[i + 1..i + 3], 16) {
-                out.push(b);
+            if let (Some(h), Some(l)) = (hex(bytes[i + 1]), hex(bytes[i + 2])) {
+                out.push(h * 16 + l);
                 i += 3;
                 continue;
             }
@@ -168,7 +171,14 @@ fn decode_uri(uri: &str) -> String {
         out.push(bytes[i]);
         i += 1;
     }
-    String::from_utf8_lossy(&out).into_owned()
+    let path = String::from_utf8_lossy(&out).into_owned();
+    // Windows drive paths come as `/c:/…`; keep the leading slash for Unix paths.
+    let b = path.as_bytes();
+    if b.len() >= 3 && b[0] == b'/' && b[1].is_ascii_alphabetic() && b[2] == b':' {
+        path[1..].to_string()
+    } else {
+        path
+    }
 }
 
 /// `workspace.json` → the folder the VS Code window has open.
@@ -176,7 +186,7 @@ pub fn workspace_folder(path: &Path) -> Option<String> {
     let text = std::fs::read_to_string(path).ok()?;
     let v: Value = serde_json::from_str(&text).ok()?;
     let uri = s(&v, "folder").or_else(|| s(&v, "workspace"))?;
-    Some(decode_uri(uri))
+    Some(crate::util::native_path(&decode_uri(uri)))
 }
 
 #[cfg(test)]
@@ -190,5 +200,14 @@ mod tests {
             "Reading shop-api/version.json"
         );
         assert_eq!(strip_links("Ran [tests](cmd:x) now"), "Ran tests now");
+    }
+
+    #[test]
+    fn decodes_file_uris_on_every_platform() {
+        assert_eq!(decode_uri("file:///c%3A/code/app"), "c:/code/app");
+        assert_eq!(decode_uri("file:///home/me/my%20app#frag"), "/home/me/my app");
+        assert_eq!(decode_uri("file:///x/%E2%9C%93%"), "/x/✓%"); // trailing % must not panic
+        assert_eq!(crate::util::native_path("c:/code/app/"), r"C:\code\app");
+        assert_eq!(crate::util::native_path("/home/me/app"), "/home/me/app");
     }
 }

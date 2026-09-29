@@ -90,7 +90,7 @@ shows its project, branch, model, token usage and recent activity.
 | GitHub Copilot CLI | `~/.copilot/session-state/*/events.jsonl` | full: tools, permission prompts, session names |
 | GitHub Copilot Chat (VS Code, Insiders, Cursor, VSCodium) | `<config>/Code*/User/workspaceStorage/*/chatSessions/*.jsonl` | prompts, tool invocations, titles |
 | Gemini CLI | `~/.gemini/tmp/*/chats/session-*.json` | prompts, tools, tokens |
-| Antigravity | `~/.gemini/antigravity*/conversations/*` | presence only (binary format) |
+| Antigravity (IDE and CLI) | `~/.gemini/antigravity*/conversation_summaries.db`, `conversations/`, `history.jsonl` | title, project, run status, sub-agents, prompts (CLI) |
 | OpenCode | `~/.local/share/opencode/opencode.db*` | presence only |
 
 `<config>` is `%APPDATA%` on Windows, `~/Library/Application Support` on macOS and `~/.config`

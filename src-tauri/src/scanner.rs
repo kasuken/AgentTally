@@ -2,7 +2,7 @@
 //! `Session` per file.
 
 use crate::model::{Session, Snapshot};
-use crate::providers::{claude, codex, copilot, gemini, vscode, Candidate, Format, Roots};
+use crate::providers::{antigravity, claude, codex, copilot, gemini, vscode, Candidate, Format, Roots};
 use crate::util::{mtime_ms, now_ms};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -26,6 +26,8 @@ struct Tracked {
     partial: Vec<u8>,
     len: u64,
     mtime: i64,
+    /// Files that count as activity besides `path` (e.g. a SQLite `-wal`).
+    companions: Vec<PathBuf>,
     session: Session,
 }
 
@@ -46,9 +48,11 @@ impl Scanner {
             match self.tracked.get_mut(&cand.path) {
                 Some(t) => {
                     // Cheap metadata (titles in side files) can change at any time.
-                    if cand.title.is_some() && cand.format != Format::Claude {
+                    // Claude and Antigravity keep better titles in the logs themselves.
+                    if cand.title.is_some() && !matches!(cand.format, Format::Claude | Format::Antigravity) {
                         t.session.title = cand.title;
                     }
+                    t.companions = cand.companions;
                 }
                 None => {
                     let t = Tracked::new(cand);
@@ -61,21 +65,20 @@ impl Scanner {
     /// Reads whatever was appended to tracked files since the last poll.
     pub fn poll(&mut self) {
         let since = now_ms() - LOOKBACK_MS;
-        self.tracked.retain(|_, t| match fs::metadata(&t.path) {
-            Ok(meta) => {
-                let mtime = mtime_ms(&meta);
+        self.tracked.retain(|_, t| match t.stat() {
+            Some((mtime, len)) => {
                 if mtime < since {
                     return false;
                 }
-                if mtime != t.mtime || meta.len() != t.len {
+                if mtime != t.mtime || len != t.len {
                     t.mtime = mtime;
-                    t.len = meta.len();
+                    t.len = len;
                     t.session.file_mtime = mtime;
                     t.refresh();
                 }
                 true
             }
-            Err(_) => false,
+            None => false,
         });
     }
 
@@ -102,12 +105,44 @@ impl Tracked {
         session.title = c.title;
         session.client = c.client;
         session.presence_only = c.format == Format::Presence;
-        Tracked { format: c.format, path: c.path, offset: 0, partial: Vec::new(), len: 0, mtime: 0, session }
+        Tracked {
+            format: c.format,
+            path: c.path,
+            offset: 0,
+            partial: Vec::new(),
+            len: 0,
+            mtime: 0,
+            companions: c.companions,
+            session,
+        }
+    }
+
+    /// Newest mtime and the length of the main file; companions only add activity.
+    /// `None` when the main file is gone.
+    fn stat(&self) -> Option<(i64, u64)> {
+        let meta = fs::metadata(&self.path).ok()?;
+        let mut mtime = mtime_ms(&meta);
+        let mut len = meta.len();
+        for c in &self.companions {
+            if let Ok(m) = fs::metadata(c) {
+                mtime = mtime.max(mtime_ms(&m));
+                len = len.wrapping_add(m.len());
+            }
+        }
+        Some((mtime, len))
     }
 
     fn refresh(&mut self) {
         match self.format {
             Format::Presence => {}
+            Format::Antigravity => {
+                // conversations/<id>.db → the app folder holding the summaries and history.
+                let Some(base) = self.path.parent().and_then(|p| p.parent()) else { return };
+                let id = self.session.id.clone();
+                let summary = antigravity::read_summary(&base.join("conversation_summaries.db"), &id);
+                let prompts = antigravity::read_prompts(&base.join("history.jsonl"), &id);
+                antigravity::apply(&mut self.session, summary, prompts, self.mtime);
+            }
             Format::Gemini => {
                 if self.len > MAX_DOC {
                     return;
@@ -214,7 +249,7 @@ fn apply_line(format: Format, sess: &mut Session, line: &[u8]) {
         Format::Codex => codex::apply(sess, &v),
         Format::Copilot => copilot::apply(sess, &v),
         Format::VsCode => vscode::apply(sess, &v),
-        Format::Gemini | Format::Presence => {}
+        Format::Gemini | Format::Antigravity | Format::Presence => {}
     }
 }
 
@@ -277,6 +312,7 @@ mod tests {
             cwd: None,
             title: None,
             client: None,
+            companions: Vec::new(),
         });
         t.len = len;
         t.read_lines();

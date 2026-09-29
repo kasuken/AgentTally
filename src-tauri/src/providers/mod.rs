@@ -1,5 +1,6 @@
 //! Where each agent keeps its logs, and how to find recently touched sessions.
 
+pub mod antigravity;
 pub mod claude;
 pub mod codex;
 pub mod copilot;
@@ -19,6 +20,8 @@ pub enum Format {
     VsCode,
     Gemini,
     /// Binary or undocumented storage: only "the file changed" is known.
+    /// Antigravity conversation: SQLite summary row plus CLI prompt history.
+    Antigravity,
     Presence,
 }
 
@@ -34,6 +37,8 @@ pub struct Candidate {
     pub cwd: Option<String>,
     pub title: Option<String>,
     pub client: Option<String>,
+    /// Other files whose writes count as activity (e.g. a SQLite `-wal`).
+    pub companions: Vec<PathBuf>,
 }
 
 impl Candidate {
@@ -48,6 +53,7 @@ impl Candidate {
             cwd: None,
             title: None,
             client: None,
+            companions: Vec::new(),
         }
     }
 }
@@ -226,9 +232,22 @@ impl Roots {
     fn discover_presence(&self, since: i64, out: &mut Vec<Candidate>) {
         for app in ["antigravity", "antigravity-cli"] {
             let base = self.gemini.join(app);
-            for (path, _) in recent_files(&base.join("conversations"), since, |_| true) {
-                let id = stem(&path);
-                let mut c = Candidate::new(Format::Presence, "antigravity", path, id.clone());
+            // One conversation is `<id>.db` plus `-wal`/`-shm` companions (or a legacy `<id>.pb`).
+            let mut groups: std::collections::BTreeMap<String, Vec<(PathBuf, i64)>> = Default::default();
+            for (path, mtime) in recent_files(&base.join("conversations"), 0, |_| true) {
+                let name = file_name(&path);
+                let id = name.split('.').next().unwrap_or(&name).to_string();
+                groups.entry(id).or_default().push((path, mtime));
+            }
+            for (id, mut files) in groups {
+                if files.iter().all(|(_, m)| *m < since) {
+                    continue;
+                }
+                // The main database is the anchor; writes usually land in the -wal first.
+                files.sort_by_key(|(p, _)| !p.extension().is_some_and(|e| e == "db" || e == "pb"));
+                let (main, _) = files.remove(0);
+                let mut c = Candidate::new(Format::Antigravity, "antigravity", main, id.clone());
+                c.companions = files.into_iter().map(|(p, _)| p).collect();
                 c.title = antigravity_title(&base.join("brain").join(&id))
                     .or_else(|| Some("Antigravity conversation".into()));
                 c.client = Some(app.into());
@@ -236,16 +255,16 @@ impl Roots {
             }
         }
         for base in &self.opencode {
-            for name in ["opencode.db-wal", "opencode.db"] {
-                let path = base.join(name);
-                if let Ok(meta) = fs::metadata(&path) {
-                    if mtime_ms(&meta) >= since {
-                        let mut c = Candidate::new(Format::Presence, "opencode", path, "opencode");
-                        c.title = Some("OpenCode session".into());
-                        out.push(c);
-                        break;
-                    }
-                }
+            let main = base.join("opencode.db");
+            let wal = base.join("opencode.db-wal");
+            let recent = [&main, &wal]
+                .iter()
+                .any(|p| fs::metadata(p).map(|m| mtime_ms(&m) >= since).unwrap_or(false));
+            if recent && main.exists() {
+                let mut c = Candidate::new(Format::Presence, "opencode", main, "opencode");
+                c.companions = vec![wal];
+                c.title = Some("OpenCode session".into());
+                out.push(c);
             }
         }
     }

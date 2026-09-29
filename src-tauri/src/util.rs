@@ -135,6 +135,22 @@ pub fn short_path(p: &str) -> String {
     }
 }
 
+/// `c:/code/app` → `C:\code\app`: drive paths decoded from URIs are written the way other
+/// agents log their working directory, so the same project is recognised as one.
+pub fn native_path(p: &str) -> String {
+    let b = p.as_bytes();
+    if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' {
+        let mut out = p.replace('/', "\\");
+        out[..1].make_ascii_uppercase();
+        if out.len() > 3 {
+            out.truncate(out.trim_end_matches('\\').len());
+        }
+        out
+    } else {
+        p.to_string()
+    }
+}
+
 /// Last path component, used as the project name for a working directory.
 pub fn project_name(cwd: &str) -> String {
     cwd.trim_end_matches(['/', '\\'])

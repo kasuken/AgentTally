@@ -203,7 +203,7 @@ function renderSide() {
   const pill = el.querySelector(".pill"); pill.style.color = STATUS[s.status].color; pill.textContent = statusLabel(s.status);
   const note = el.querySelector(".attention-note"); note.hidden = !needsAttention(s); note.className = `attention-note ${s.status}`;
   note.textContent = s.status === "blocked" ? `Permission requested. Review it in ${providerMeta(s.provider).name}.` : `Turn finished. Continue the conversation in ${providerMeta(s.provider).name}.`;
-  const facts = [["Agent", `${providerMeta(s.provider).name}${s.client ? ` · ${s.client}` : ""}`], ["Project", s.cwd || s.project], s.branch && ["Branch",s.branch], s.model && ["Model",s.model], s.parent && ["Role", "Sub-agent"], ["Started", s.started ? exactTime(s.started) : "Unknown"], ["Last seen",exactTime(s.lastTs)], ["Coverage", ["antigravity","opencode"].includes(s.provider) ? "File activity only" : "Parsed local logs"]].filter(Boolean);
+  const facts = [["Agent", `${providerMeta(s.provider).name}${s.client ? ` · ${s.client}` : ""}`], ["Project", s.cwd || s.project], s.branch && ["Branch",s.branch], s.model && ["Model",s.model], s.parent && ["Role", "Sub-agent"], ["Started", s.started ? exactTime(s.started) : "Unknown"], ["Last seen",exactTime(s.lastTs)], ["Coverage", s.provider === "opencode" ? "File activity only" : "Parsed local logs"]].filter(Boolean);
   html(el.querySelector(".facts"), facts.map(([k,v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join(""));
   html(el.querySelector(".stats"), `<span><b>${compact(s.toolCalls)}</b> tool calls</span><span><b>${compact(s.tokensIn)}</b> tokens in</span><span><b>${compact(s.tokensOut)}</b> tokens out</span>`);
   const events = [...s.events].reverse();
