@@ -1,25 +1,24 @@
 # AgentTally
 
-A 16-bit hex world that shows what the AI coding agents on your machine are doing, live.
+[![Latest release](https://img.shields.io/github/v/release/kasuken/AgentTally?label=download)](https://github.com/kasuken/AgentTally/releases/latest)
+[![CI](https://github.com/kasuken/AgentTally/actions/workflows/ci.yml/badge.svg)](https://github.com/kasuken/AgentTally/actions/workflows/ci.yml)
+![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-informational)
 
-Every agent session is a small robot. Every project is a hex island with a **Core** in the
-middle and six stations around it. Robots walk to the station that matches what their agent is
-doing right now, so one glance tells you who is reading code, who is editing, who is running
-commands, and who is waiting for **you**.
+See what the AI coding agents on your machine are doing, live: Claude Code, Codex, GitHub
+Copilot, Gemini CLI, Antigravity and more, side by side.
 
-![AgentTally showing seven project islands with robots at work](docs/screenshots/world.png)
+AgentTally has two interfaces over the same data, and you can switch between them at any time:
+
+- **Pixel** (default): a 16-bit hex world. Every project is an island, every agent session is a
+  small robot that walks to the building matching what it is doing right now.
+- **Pro**: a calm workspace dashboard with one panel per project, one row per session and a
+  30-minute activity timeline.
+
+![The Pixel interface: seven project islands with robots at work](docs/screenshots/world.png)
+
+![The Pro interface: projects as panels with session timelines](docs/screenshots/pro.png)
 
 AgentTally only **reads** local log files. It never sends anything anywhere.
-
-### Two interfaces, same data
-
-Prefer something quieter for the office? Press **Pro view** in the top bar (or <kbd>U</kbd>) to
-switch to a professional workspace dashboard: one panel per project, one row per session with a
-30-minute activity timeline, the current activity, a tool-mix bar and the time it was last seen.
-Search, filters, sorting, session details and the activity log work the same in both. The pixel
-world is the default, and AgentTally remembers the one you picked.
-
-![The Pro workspace view with a session waiting for approval](docs/screenshots/pro.png)
 
 ## Install
 
@@ -58,9 +57,13 @@ sudo apt install ./AgentTally_*_amd64.deb        # Debian, Ubuntu
 sudo dnf install ./AgentTally-*.x86_64.rpm       # Fedora, RHEL
 ```
 
-Then just start your agents as usual. Robots beam in as soon as a session writes to its log.
+Then just start your agents as usual. Sessions appear as soon as they write to their logs.
 
-## How it works
+## The Pixel world
+
+Every project is a hex island with a **Core** in the middle and six buildings around it. Robots
+walk to the building that matches what their agent is doing, so one glance tells you who is
+reading code, who is editing, who is running commands, and who is waiting for **you**.
 
 | Station     | Activity                                   | Examples                                  |
 |-------------|--------------------------------------------|-------------------------------------------|
@@ -74,68 +77,98 @@ Then just start your agents as usual. Robots beam in as soon as a session writes
 
 Robot bubbles: `…` thinking · yellow `!` finished its turn, **your turn** · red `?` waiting for
 permission · `Zzz` sleeping. The chest light shows the status colour. Sub-agents are small drones
-that orbit their parent robot.
+that orbit their parent robot. **Station guide** (bottom left of the map, or <kbd>?</kbd>) shows
+every building and what it means.
 
-Select a robot or a party card to follow it: the camera flies to it and the details window
-shows its project, branch, model, token usage and recent activity.
+<img src="docs/screenshots/guide.png" alt="The station guide with every building and status" width="720" />
 
-![Details of a session waiting for approval](docs/screenshots/details.png)
+Each robot also has a colour and head for its agent: orange with a star antenna for Claude,
+white with a visor for Codex, purple or blue with goggles for Copilot, blue with a sparkle for
+Gemini, and a hovering cyan robot for Antigravity.
 
-### Supported agents
+## The Pro workspace
+
+Press **Pro view** in the top bar (or <kbd>U</kbd>) for a professional dashboard with the same
+data and the same controls:
+
+- One panel per project, showing its path and counts (approvals, your turn, working, sessions,
+  tool calls). Projects that need you come first.
+- One row per session: status, title, agent, current activity, and a chip for what it is doing
+  now (Think, Read, Edit, Run, Web, Plan, or its status when it is not working).
+- A **30-minute activity timeline** per session: each tick is one event, coloured by what the
+  agent was doing (the guide has the full legend). Next to it: the tool mix, tool count and when
+  the session was last seen.
+- Sub-agents are indented under their parent session.
+
+AgentTally remembers your choice of interface. The Pixel world is the default.
+
+## Session details
+
+Select a robot, a workspace row, a session card or an activity entry to open its details: project
+path, branch, model, start time, token usage, tool calls and the recent activity with timestamps.
+In the Pixel world the camera flies to the robot; in Pro view the row is highlighted. Approvals
+and replies still happen in the original agent application; AgentTally tells you where to look.
+
+| Pixel | Pro |
+|---|---|
+| ![Details of a session waiting for approval, Pixel](docs/screenshots/details.png) | ![Details of a session waiting for approval, Pro](docs/screenshots/pro-details.png) |
+
+## Supported agents
 
 | Agent | Where it reads | Detail |
 |---|---|---|
-| Claude Code (CLI, desktop, IDE) | `~/.claude/projects/*/*.jsonl` (+ `subagents/`) | full: prompts, tools, tokens, titles |
+| Claude Code (CLI, desktop, IDE) | `~/.claude/projects/*/*.jsonl` (+ `subagents/`) | full: prompts, tools, tokens, titles, sub-agents |
 | Codex (CLI / desktop) | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | full: tools (incl. code-mode `exec`), tokens, sub-agents |
 | GitHub Copilot CLI | `~/.copilot/session-state/*/events.jsonl` | full: tools, permission prompts, session names |
 | GitHub Copilot Chat (VS Code, Insiders, Cursor, VSCodium) | `<config>/Code*/User/workspaceStorage/*/chatSessions/*.jsonl` | prompts, tool invocations, titles |
 | Gemini CLI | `~/.gemini/tmp/*/chats/session-*.json` | prompts, tools, tokens |
 | Antigravity (IDE and CLI) | `~/.gemini/antigravity*/conversation_summaries.db`, `conversations/`, `history.jsonl` | title, project, run status, sub-agents, prompts (CLI) |
-| OpenCode | `~/.local/share/opencode/opencode.db*` | presence only |
+| OpenCode | `~/.local/share/opencode/opencode.db*` | activity only |
 
 `<config>` is `%APPDATA%` on Windows, `~/Library/Application Support` on macOS and `~/.config`
 on Linux. `CLAUDE_CONFIG_DIR` and `CODEX_HOME` are respected. Sessions touched in the last
-24 hours are tracked; the UI filters to LIVE / 1H / 6H / 24H.
+24 hours are tracked; the UI filters to LIVE / 1H / 6H / 24H. When several agents work in the
+same folder, they share one project.
 
 ### How status is derived
 
 - **Working**: a turn is open and something was logged in the last 2 minutes (20 minutes if a
-  tool call is still running).
+  tool call is still running). For Antigravity: its run status is "running".
 - **Your turn**: the agent ended its turn (e.g. Claude `end_turn`, Codex `task_complete`,
-  Copilot final `assistant.turn_end`) less than 20 minutes ago.
+  Copilot's final `assistant.turn_end`, Antigravity "idle") less than 20 minutes ago.
 - **Needs approval**: a permission or approval request is pending (Copilot CLI, Codex).
-- **Idle / Sleeping**: quiet for 20 minutes / 3 hours. **Offline**: the session was shut down.
+- **Idle / Sleeping**: quiet for 20 minutes / 3 hours. **Offline**: the session was shut down
+  or stopped.
 
 ## Controls
 
-The screen is a 16-bit HUD: counters and the time window on top, the hex world as the main
-window (sources, map controls and the station key float over it), the world log below and the
-party list on the right. **Needs you** comes first: permission requests, then completed turns.
-Click a HUD counter or a party status tab to filter. Counters always cover the selected time
-window and enabled providers; search, project, and status filters (in the party window) narrow
-the world, party list, and world log together.
+The top bar has the counters, the time window, the interface switch and the guide. The main
+window is the Pixel world or the Pro workspace, with the activity log below it and the session
+list on the right. **Needs you** comes first: permission requests, then completed turns.
+Click a counter or a status tab to filter. Counters always cover the selected time window and
+enabled sources; search, project, and status filters (in the session list) narrow the main
+window, the session list, and the activity log together.
 
-- Search by session title, project, path, provider, client, or model. `/` focuses search.
-- Filter by project or provider. **Clear filters** restores all sources and the 6-hour window.
+- Search by session title, project, path, provider, client, or model. <kbd>/</kbd> focuses search.
+- Filter by project or source (click a source chip to hide or show it). **Clear filters**
+  restores all sources and the 6-hour window.
 - Sessions default to **Needs you first**, with stable ordering within each status so they
   do not jump around on every log update. Choose **Recently active** or **By project** as needed.
-- Select a robot, session, or activity entry to inspect details and wrapped event text.
-  Copy the project path or locate the robot from the details panel. Approvals and replies
-  still happen in the original agent application.
-- Drag to pan, scroll to zoom around the pointer, or use the zoom buttons. `F` fits the world.
-- **Motion** pauses animation while snapshots keep updating. Reduced-motion preferences
-  are respected. Rendering is capped at 30 fps and stops while the page is hidden.
-- `Esc` closes session details; `?` opens the guide; `U` switches between the Pixel and Pro
-  interfaces. Controls are keyboard accessible.
+- Details: copy the project path, or **Locate on map** / **Show in workspace**.
+- Pixel world: drag to pan, scroll to zoom around the pointer, or use the zoom buttons.
+  <kbd>F</kbd> fits the world. **Motion** pauses animation while data keeps updating.
+- Pro view: <kbd>F</kbd> scrolls the workspace back to the top.
+- <kbd>U</kbd> switches between Pixel and Pro, <kbd>Esc</kbd> closes details, <kbd>?</kbd> opens
+  the guide. Everything is keyboard accessible, and reduced-motion preferences are respected.
 - Time window, enabled sources, sorting, interface, and motion preferences are saved locally.
 
-The source badge explicitly distinguishes **DEMO**, **LIVE**, and **RECONNECTING**.
-Interrupted updates preserve the last snapshot, show a warning, and retry automatically.
+The source badge distinguishes **DEMO**, **LIVE**, and **RECONNECTING**. Interrupted updates keep
+the last snapshot, show a warning, and retry automatically.
 
-The layout adapts to smaller windows, down to a narrow side-by-side view and a phone-sized
+Both interfaces adapt to smaller windows, down to a narrow side-by-side view and a phone-sized
 single column:
 
-<img src="docs/screenshots/compact.png" alt="AgentTally in a narrow window" width="460" />
+<img src="docs/screenshots/compact.png" alt="The Pixel interface in a narrow window" width="460" />
 
 ## Build from source
 
@@ -167,8 +200,8 @@ cd src-tauri && cargo run -- --dump    # prints one snapshot as JSON
 ### Tests
 
 ```bash
-npm test           # filters, attention ordering, map fit, zoom, and paused motion
-cargo test --manifest-path src-tauri/Cargo.toml
+npm test           # filters, ordering, map fit and zoom, workspace grouping and timelines
+cargo test --manifest-path src-tauri/Cargo.toml    # log parsers, status rules, scanner
 ```
 
 For browser recovery checks without reading real agent logs, run
@@ -179,14 +212,15 @@ simulated sessions.
 
 ### Releasing
 
-Pushing a version tag builds installers for Windows, Linux, and macOS (Apple Silicon and Intel)
-with GitHub Actions and publishes them as a GitHub release:
+1. Bump `version` in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`
+   (then run `npm install` and `cargo check` to update the lock files).
+2. Write the release notes in `.github/release-notes.md`.
+3. Push a version tag. GitHub Actions builds installers for Windows, Linux and macOS (Apple
+   Silicon and Intel) and publishes the release:
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+git tag -a vX.Y.Z -m "AgentTally vX.Y.Z" && git push origin vX.Y.Z
 ```
-
-Bump `version` in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json` first.
 
 ## Project layout
 
@@ -196,17 +230,19 @@ src-tauri/src/
   scanner.rs        finds session files, tails them incrementally (2 MB replay on first sight;
                     project root, first prompt and parent are read from the head)
   model.rs          Session / Activity / Status, tool → station mapping
-  providers/        one parser per agent log format
+  providers/        one parser per agent log format (Antigravity reads its SQLite summaries
+                    read-only via rusqlite)
 ui/
   index.html        one page for both interfaces
   style.css         Pixel interface (default)
   pro.css           Pro interface, loaded instead of style.css
+  js/main.js        data source, counters, session list, details, activity log, interface switch
   js/world.js       hex map, layout, robots, camera, rendering (Pixel)
   js/board.js       project panels, session rows and activity timelines (Pro)
   js/sprites.js     pixel art: robots, tiles, buildings, bubbles
-  js/main.js        data source, HUD, roster, logs
   js/selectors.js   time, project, provider, search, status, and sorting rules
   js/demo.js        simulated data for ?demo
+docs/screenshots/   README images, taken from demo mode
 .github/workflows/  CI tests and the cross-platform release build
 ```
 
