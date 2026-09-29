@@ -1,0 +1,19 @@
+{
+  "name": "agent-tally",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "16-bit hex world that shows what your local AI coding agents are doing",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icon": "tauri icon assets/icon.png",
+    "preview": "node scripts/serve.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "@fontsource/press-start-2p": "^5.3.0",
+    "@fontsource/vt323": "^5.3.0",
+    "@tauri-apps/cli": "^2"
+  }
+}
