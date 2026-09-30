@@ -1,20 +1,17 @@
-# AgentTally v0.2.1
+# AgentTally v0.2.2
 
-## Antigravity, step by step
+## See what your sub-agents are doing
 
-Antigravity sessions used to show a single "Running" entry. AgentTally now reads each conversation's steps, so you see what Antigravity is actually doing, in both the Pixel world and the Pro view:
+When an agent hands work to sub-agents (for example Claude Code background agents), the main agent can already be waiting for you while its sub-agents keep working. AgentTally now makes that visible:
 
-- Your prompts, the model's reasoning and its replies.
-- Every tool call on the right station, with the summary Antigravity writes for it: `run_command` at the Terminal ("Run tests"), `view_file`, `grep_search` and `list_dir` at the Library, file writes and edits at the Forge, web searches at the Radar, tasks and timers at Quests.
-- Failed tool calls with their error, and background tasks finishing ("Run dotnet test finished").
-- Tool counts and the tool mix now cover the whole conversation.
-
-Works for both the Antigravity IDE and CLI. New steps are read as they arrive; a step that is still being written is picked up once it is complete.
+- **Pixel world:** a working sub-agent drone flies to the station of its *own* activity (the Forge while writing, the Terminal while running commands, the Library while reading) with a dotted tether back to its parent. Idle drones return to orbit their parent. Drones have a new sprite with a rotor, agent colours and a status light, and the parent robot shows one pip per busy sub-agent.
+- **Party list:** sub-agents are nested directly under their parent with a connector, a drone portrait, a SUB-AGENT tag and their role. The parent card says "2 sub-agents working". Session details show which agent a sub-agent belongs to, and how many sub-agents a parent has.
+- **Pro view:** sub-agent rows are badged "Sub-agent · role" and parents show how many of their sub-agents are working.
+- **Better names:** Claude Code sub-agents are named after their task ("Build backend foundation") instead of the first line of their prompt.
 
 ## Fixes
 
-- Old Antigravity conversations could look like they had just finished ("your turn"). Reading a SQLite database touches its `-shm` file, and AgentTally mistook that for activity. Those files are now ignored, databases without a journal are opened without creating any files, and a finished turn is dated by Antigravity itself.
-- Tool arguments are recognised regardless of letter case, so file paths and commands show up for more agents.
+- Claude Code agents no longer jump back to the Core after every tool result; they stay at the tool's station until their next step.
 
 **Supported agents:** Claude Code, Codex, GitHub Copilot CLI, GitHub Copilot Chat (VS Code, Insiders, Cursor, VSCodium), Gemini CLI, Antigravity, plus activity-only support for OpenCode. AgentTally only reads local log files and never sends anything anywhere.
 
