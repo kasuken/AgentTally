@@ -463,6 +463,16 @@ button.counter:hover { background: var(--raised); border-color: var(--edge-stron
 .card .doing { font-size: 12px; color: #c4ccd6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card .status-line { display: flex; align-items: center; gap: 6px; font-size: 11px; }
 .card .provider-name { margin-left: auto; color: var(--faint); }
+.card.child { width: calc(100% - 18px); margin-left: 18px; position: relative; }
+.card.child::before {
+  content: ""; position: absolute; left: -11px; top: -4px; width: 8px; height: 26px;
+  border-left: 1px solid var(--edge-strong); border-bottom: 1px solid var(--edge-strong); border-bottom-left-radius: 4px;
+}
+.tag.sub { background: transparent; color: var(--c) !important; border: 1px solid var(--c); }
+.subs { margin-left: 8px; color: var(--dim); }
+.subs.busy { color: var(--green); }
+.s-subs { flex: none; padding: 0 7px; border-radius: 10px; font-size: 11px; color: var(--dim); background: var(--raised); white-space: nowrap; }
+.s-subs.busy { color: var(--green); background: rgba(76, 195, 138, 0.12); }
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
 .card.working .dot { animation: pulse-dot 2s ease-in-out infinite; }
 @keyframes pulse-dot { 50% { opacity: 0.4; } }

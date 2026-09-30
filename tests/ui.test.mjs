@@ -137,3 +137,19 @@ test('timeline keeps only events from the last 30 minutes, placed by time', () =
   assert.deepEqual(ticks.map(t => [Math.round(t.left), t.tone]), [[50, 'terminal'], [100, 'hub']]);
   assert.equal(eventTone({ kind: 'user' }), 'user');
 });
+
+// ---------------------------------------------------------------- sub-agents
+import { nestSubagents } from '../ui/js/selectors.js';
+
+test('sub-agents are listed right under their parent, with a count of the busy ones', () => {
+  const list = sortSessions([
+    session('parent', 'waiting'),
+    session('kid-a', 'working', 0, { parent: 'parent' }),
+    session('other', 'blocked'),
+    session('kid-b', 'idle', 0, { parent: 'parent' }),
+    session('orphan', 'working', 0, { parent: 'gone' }),
+  ]);
+  const rows = nestSubagents(list);
+  assert.deepEqual(rows.map((r) => [r.key, r.depth]), [['other', 0], ['parent', 0], ['kid-a', 1], ['kid-b', 1], ['orphan', 0]]);
+  assert.deepEqual(rows[1].kids, { total: 2, working: 1 });
+});

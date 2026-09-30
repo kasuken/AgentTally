@@ -90,6 +90,60 @@ export function robotSprite(opts) {
   return c;
 }
 
+// 11 x 9 sub-agent drone: rotor, body in the agent's colours, two eyes, status light, skids.
+const DRONE = {
+  rotorA: "mmmm.k.mmmm",
+  rotorB: "...mmkmm...",
+  body: [
+    ".....k.....",
+    "..kkkkkkk..",
+    ".kbhhhhhbk.",
+    ".kbvevevbk.",
+    ".kBbbcbbBk.",
+    "..kkkkkkk..",
+    "..k.....k..",
+    ".kk.....kk.",
+  ],
+};
+
+/**
+ * Offscreen canvas with a sub-agent drone. opts: { provider, rotor: 0|1, eyes, chest, gray }.
+ * With `portrait: true` it is centred on a 13 x 16 canvas, the size of a robot portrait.
+ */
+export function droneSprite(opts) {
+  const key = "drone" + JSON.stringify(opts);
+  let c = spriteCache.get(key);
+  if (c) return c;
+  const m = providerMeta(opts.provider);
+  const shade = (hex) => {
+    if (!opts.gray) return hex;
+    const n = parseInt(hex.slice(1), 16);
+    const v = Math.round(((n >> 16) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11) * 0.6);
+    return `rgb(${v},${v},${v + 8})`;
+  };
+  const pal = {
+    k: OUTLINE, b: shade(m.body), B: shade(m.shade), h: shade(m.light), v: "#1d2342",
+    e: opts.gray || opts.eyes === "off" ? "#262a3a" : opts.eyes === "closed" ? "#2a3050" : m.eye,
+    m: shade("#b9c0d3"), c: opts.chest || "#46e07a",
+  };
+  const rows = [opts.rotor ? DRONE.rotorB : DRONE.rotorA, ...DRONE.body];
+  c = document.createElement("canvas");
+  c.width = opts.portrait ? 13 : 11;
+  c.height = opts.portrait ? 16 : rows.length;
+  const ox = opts.portrait ? 1 : 0, oy = opts.portrait ? 4 : 0;
+  const g = c.getContext("2d");
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      const ch = row[x];
+      if (ch === "." || !pal[ch]) continue;
+      g.fillStyle = pal[ch];
+      g.fillRect(x + ox, y + oy, 1, 1);
+    }
+  });
+  spriteCache.set(key, c);
+  return c;
+}
+
 // ---------------------------------------------------------------- tiles
 
 export const TERRAIN = {

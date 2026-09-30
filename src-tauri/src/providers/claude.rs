@@ -61,7 +61,9 @@ fn user(sess: &mut Session, v: &Value, ts: i64) {
                         if item.get("is_error").and_then(Value::as_bool) == Some(true) {
                             sess.push(Activity::new(ts, Kind::Error, "A tool call failed"));
                         } else {
-                            sess.push(Activity::new(ts, Kind::Think, ""));
+                            // The result of the current tool: still busy with it until the next step.
+                            sess.touch(ts);
+                            sess.turn_open = true;
                         }
                     }
                     Some("text") => prompt(sess, s(item, "text").unwrap_or(""), ts),

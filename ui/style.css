@@ -360,6 +360,17 @@ button.counter:hover { background: #2a3478; }
 .card .doing { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #dfe3ff; }
 .card .status-line { display: flex; align-items: center; gap: 6px; font: 6px var(--pixel); letter-spacing: 1px; text-transform: uppercase; }
 .card .provider-name { display: none; }
+/* Sub-agents hang under their parent, joined by a connector. */
+.card.child { width: calc(100% - 22px); margin-left: 22px; position: relative; }
+.card.child::before {
+  content: ""; position: absolute; left: -14px; top: -6px; width: 10px; height: 34px;
+  border-left: 2px dotted var(--dim); border-bottom: 2px dotted var(--dim);
+}
+.card.child img { width: 33px; height: 40px; }
+.tag.sub { background: var(--outline); color: var(--c); border-color: var(--c); }
+.subs { margin-left: 8px; color: var(--dim); }
+.subs::before { content: "◆ "; }
+.subs.busy { color: var(--green); }
 .dot { display: inline-block; width: 8px; height: 8px; border: 2px solid var(--outline); background: currentColor; flex: none; }
 .card.working .dot { animation: blink 0.8s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0.25; } }

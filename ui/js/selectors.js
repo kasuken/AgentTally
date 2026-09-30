@@ -21,3 +21,30 @@ export function sortSessions(sessions, sort = "attention") {
     (sort !== "recent" ? order[a.status] - order[b.status] : b.lastTs - a.lastTs) ||
     (sort !== "recent" ? a.project.localeCompare(b.project) : 0) || a.key.localeCompare(b.key));
 }
+
+/**
+ * Puts each sub-agent right after its parent (when the parent is in the list), deepest last,
+ * keeping the given order otherwise. Returns `{ key, s, depth, kids: { total, working } }`.
+ */
+export function nestSubagents(list) {
+  const keys = new Set(list.map((s) => s.key));
+  const children = new Map();
+  for (const s of list) {
+    if (s.parent && keys.has(s.parent) && s.parent !== s.key) {
+      if (!children.has(s.parent)) children.set(s.parent, []);
+      children.get(s.parent).push(s);
+    }
+  }
+  const out = [];
+  const seen = new Set();
+  const add = (s, depth) => {
+    if (seen.has(s.key)) return;
+    seen.add(s.key);
+    const kids = children.get(s.key) || [];
+    out.push({ key: s.key, s, depth, kids: { total: kids.length, working: kids.filter((k) => k.status === "working").length } });
+    kids.forEach((k) => add(k, depth + 1));
+  };
+  list.filter((s) => !(s.parent && keys.has(s.parent))).forEach((s) => add(s, 0));
+  list.forEach((s) => add(s, 1)); // anything left (e.g. a parent cycle)
+  return out;
+}

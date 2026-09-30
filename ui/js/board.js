@@ -38,8 +38,9 @@ export function groupProjects(sessions) {
     const place = (s, depth) => {
       if (placed.has(s.key)) return;
       placed.add(s.key);
-      rows.push({ session: s, depth });
-      for (const child of sortSessions(list.filter((c) => c.parent === s.key), "attention")) place(child, depth + 1);
+      const children = sortSessions(list.filter((c) => c.parent === s.key), "attention");
+      rows.push({ session: s, depth, kids: { total: children.length, working: children.filter((c) => c.status === "working").length } });
+      for (const child of children) place(child, depth + 1);
     };
     roots.forEach((s) => place(s, 0));
     list.forEach((s) => place(s, 1)); // cycles or orphans, just in case
@@ -64,7 +65,7 @@ export function timelineTicks(events, now) {
     .map((e) => ({ left: Math.min(100, Math.max(0, ((e.ts - start) / TIMELINE_MS) * 100)), tone: eventTone(e), event: e }));
 }
 
-function rowMarkup({ session: s, depth }, now) {
+function rowMarkup({ session: s, depth, kids }, now) {
   const m = providerMeta(s.provider);
   const working = s.status === "working";
   const tone = working ? (s.current ? eventTone(s.current) : "hub") : `st-${s.status}`;
@@ -79,13 +80,20 @@ function rowMarkup({ session: s, depth }, now) {
   const mixTitle = total ? tools.map((n, i) => `${TONE_LABEL[TOOL_STATIONS[i]]} ${n}`).join(" · ") : "No tool calls yet";
   return `<span class="s-dot"></span>
     <span class="s-main">
-      <span class="s-line1">${depth ? '<span class="s-sub" title="Sub-agent">↳</span>' : ""}<b>${esc(s.title)}</b></span>
-      <span class="s-line2"><span class="badge" style="--c:${m.body}">${esc(m.name)}</span><span class="s-doing">${esc(describe(s.current))}</span></span>
+      <span class="s-line1">${depth ? '<span class="s-sub" title="Sub-agent">↳</span>' : ""}<b>${esc(s.title)}</b>${subsPill(kids)}</span>
+      <span class="s-line2"><span class="badge" style="--c:${m.body}">${depth ? esc(`Sub-agent · ${s.role && s.role !== "subagent" ? s.role : m.name}`) : esc(m.name)}</span><span class="s-doing">${esc(describe(s.current))}</span></span>
     </span>
     <span class="s-now t-${tone}">${esc(chip)}</span>
     <span class="s-track" title="Activity in the last 30 minutes">${ticks}<i class="now"></i></span>
     <span class="s-mix" title="${esc(mixTitle)}">${mix}</span>
     <span class="s-meta"><span>${compact(s.toolCalls)} tools</span><time data-ts="${s.lastTs}">${ago(now - s.lastTs)}</time></span>`;
+}
+
+/** "2 sub-agents working" on a parent row. */
+function subsPill(kids) {
+  if (!kids?.total) return "";
+  const n = kids.working || kids.total;
+  return `<span class="s-subs${kids.working ? " busy" : ""}">${n} sub-agent${n === 1 ? "" : "s"}${kids.working ? " working" : ""}</span>`;
 }
 
 function projectHead(g) {

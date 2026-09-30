@@ -1,10 +1,10 @@
 // Local-only dashboard controller. UI filters never change the underlying sessions.
 import { World } from "./world.js";
 import { Board } from "./board.js";
-import { robotSprite, drawBuilding } from "./sprites.js";
+import { robotSprite, droneSprite, drawBuilding } from "./sprites.js";
 import { providerMeta, STATUS, STATUS_TEXT, STATIONS, KIND_ICON, ago, compact, describe, escapeHtml as esc } from "./meta.js";
 import { createDemo } from "./demo.js";
-import { WINDOWS, selectSessions, sortSessions, needsAttention, isResting, inWindow } from "./selectors.js";
+import { WINDOWS, selectSessions, sortSessions, nestSubagents, needsAttention, isResting, inWindow } from "./selectors.js";
 
 const $ = (id) => document.getElementById(id);
 const load = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
@@ -44,6 +44,20 @@ function portrait(provider, status) {
   if (!portraits.has(key)) portraits.set(key, robotSprite({ provider, legs: providerMeta(provider).hover ? "hover" : "stand", arms: false,
     eyes: status === "offline" ? "off" : status === "sleeping" ? "closed" : "open", chest: STATUS[status]?.color, gray: status === "offline" }).toDataURL());
   return portraits.get(key);
+}
+/** Sub-agents are drawn as drones everywhere: on the map, in the list and in the details. */
+function avatar(s) {
+  if (!s.parent) return portrait(s.provider, s.status);
+  const key = "drone" + s.provider + s.status;
+  if (!portraits.has(key)) portraits.set(key, droneSprite({ provider: s.provider, rotor: 0, portrait: true,
+    eyes: s.status === "offline" ? "off" : s.status === "sleeping" ? "closed" : "open", chest: STATUS[s.status]?.color, gray: s.status === "offline" }).toDataURL());
+  return portraits.get(key);
+}
+const subagentRole = (s) => (s.role && s.role !== "subagent" ? s.role : "sub-agent");
+function kidsLabel(kids) {
+  if (!kids?.total) return "";
+  const n = kids.working || kids.total;
+  return `${n} sub-agent${n === 1 ? "" : "s"}${kids.working ? " working" : ""}`;
 }
 const markupCache = new WeakMap();
 function html(el, markup) { if (markupCache.get(el) !== markup) { el.innerHTML = markup; markupCache.set(el, markup); } }
@@ -173,18 +187,25 @@ function renderProjects() {
   html($("project-filter"), markup); $("project-filter").value = state.project;
 }
 function renderRoster() {
-  const list = sortSessions(state.visible, state.sort);
-  $("party-count").textContent = `${list.length}`;
-  reconcile($("roster"), list, (b, s) => {
+  const rows = nestSubagents(sortSessions(state.visible, state.sort));
+  $("party-count").textContent = `${rows.length}`;
+  reconcile($("roster"), rows, (b, { s, depth, kids }) => {
     const m = providerMeta(s.provider), st = STATUS[s.status];
     b.dataset.key = s.key;
-    b.className = `card ${s.status} ${s.key === state.selected ? "sel" : ""}`;
+    b.className = `card ${s.status}${depth ? " child" : ""}${kids.working ? " has-busy-kids" : ""} ${s.key === state.selected ? "sel" : ""}`;
     b.setAttribute("aria-pressed", s.key === state.selected);
-    b.title = `${s.title} · ${s.cwd || s.project}`;
-    html(b, `<img src="${portrait(s.provider,s.status)}" alt="" /><span class="name"><span class="tag" style="background:${m.body}">${esc(m.short)}</span><b>${s.parent ? "↳ " : ""}${esc(s.title)}</b></span><span class="meta"><span class="project">${esc(s.project)}</span>${time(s.lastTs)}</span><span class="doing">${esc(describe(s.current))}</span><span class="status-line" style="color:${st.color}"><span class="dot"></span>${statusLabel(s.status)}<span class="provider-name">${esc(m.name)}</span></span>`);
+    b.title = `${depth ? "Sub-agent: " : ""}${s.title} · ${s.cwd || s.project}`;
+    const tag = depth
+      ? `<span class="tag sub" style="--c:${m.body}">SUB-AGENT</span>`
+      : `<span class="tag" style="background:${m.body}">${esc(m.short)}</span>`;
+    const where = depth ? subagentRole(s) : s.project;
+    const subs = kids.total ? `<span class="subs${kids.working ? " busy" : ""}">${kidsLabel(kids)}</span>` : "";
+    html(b, `<img src="${avatar(s)}" alt="" /><span class="name">${tag}<b>${esc(s.title)}</b></span><span class="meta"><span class="project">${esc(where)}</span>${time(s.lastTs)}</span><span class="doing">${esc(describe(s.current))}</span><span class="status-line" style="color:${st.color}"><span class="dot"></span>${statusLabel(s.status)}${subs}<span class="provider-name">${esc(m.name)}</span></span>`);
   });
-  if (!list.length) html($("roster"), '<li class="list-empty">No matching sessions.<br>Try another filter or clear your search.</li>');
+  if (!rows.length) html($("roster"), '<li class="list-empty">No matching sessions.<br>Try another filter or clear your search.</li>');
 }
+const parentOf = (s) => s.parent && state.visible.find((x) => x.key === s.parent);
+const childrenOf = (s) => state.visible.filter((x) => x.parent === s.key);
 let detailKey = null;
 let detailEvents = "";
 function renderSide() {
@@ -197,13 +218,13 @@ function renderSide() {
   el.hidden = false;
   // Stable controls: only update the content slots, never the detail action buttons.
   if (!el.firstElementChild) el.innerHTML = '<header><img alt="" /><div><h2></h2><span class="pill"></span></div><button class="btn close" id="close-detail" aria-label="Close session details" title="Close (Esc)">✕</button></header><p class="attention-note" hidden></p><dl class="facts"></dl><div class="detail-actions"><button class="btn" id="focus-agent">⌖ Locate on map</button><button class="btn" id="copy-path">Copy project path</button></div><p id="copy-status" class="muted" role="status"></p><div class="stats"></div><h3>Recent activity</h3><ol class="quest"></ol>';
-  el.querySelector("header img").src = portrait(s.provider,s.status);
+  el.querySelector("header img").src = avatar(s);
   el.querySelector("h2").textContent = s.title;
   $("focus-agent").textContent = ui === "pro" ? "Show in workspace" : "⌖ Locate on map";
   const pill = el.querySelector(".pill"); pill.style.color = STATUS[s.status].color; pill.textContent = statusLabel(s.status);
   const note = el.querySelector(".attention-note"); note.hidden = !needsAttention(s); note.className = `attention-note ${s.status}`;
   note.textContent = s.status === "blocked" ? `Permission requested. Review it in ${providerMeta(s.provider).name}.` : `Turn finished. Continue the conversation in ${providerMeta(s.provider).name}.`;
-  const facts = [["Agent", `${providerMeta(s.provider).name}${s.client ? ` · ${s.client}` : ""}`], ["Project", s.cwd || s.project], s.branch && ["Branch",s.branch], s.model && ["Model",s.model], s.parent && ["Role", "Sub-agent"], ["Started", s.started ? exactTime(s.started) : "Unknown"], ["Last seen",exactTime(s.lastTs)], ["Coverage", s.provider === "opencode" ? "File activity only" : "Parsed local logs"]].filter(Boolean);
+  const facts = [["Agent", `${providerMeta(s.provider).name}${s.client ? ` · ${s.client}` : ""}`], ["Project", s.cwd || s.project], s.branch && ["Branch",s.branch], s.model && ["Model",s.model], s.parent && ["Role", `Sub-agent (${subagentRole(s)})${parentOf(s) ? ` of “${parentOf(s).title}”` : ""}`], childrenOf(s).length && ["Sub-agents", kidsLabel({ total: childrenOf(s).length, working: childrenOf(s).filter((k) => k.status === "working").length }) + ` · ${childrenOf(s).length} total`], ["Started", s.started ? exactTime(s.started) : "Unknown"], ["Last seen",exactTime(s.lastTs)], ["Coverage", s.provider === "opencode" ? "File activity only" : "Parsed local logs"]].filter(Boolean);
   html(el.querySelector(".facts"), facts.map(([k,v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join(""));
   html(el.querySelector(".stats"), `<span><b>${compact(s.toolCalls)}</b> tool calls</span><span><b>${compact(s.tokensIn)}</b> tokens in</span><span><b>${compact(s.tokensOut)}</b> tokens out</span>`);
   const events = [...s.events].reverse();

@@ -2,7 +2,7 @@
 
 import {
   HEX, TERRAIN, tileSprite, robotSprite, drawBuilding, drawTree, drawRock, drawFlowers,
-  drawToolFx, drawBubble, px,
+  drawToolFx, drawBubble, px, droneSprite,
 } from "./sprites.js";
 import { providerMeta, stationFor, STATUS } from "./meta.js";
 
@@ -24,6 +24,9 @@ const SLOTS = {
 };
 
 const SPEED = 30; // world px per second
+// Where working sub-agent drones hover, relative to the station they are using.
+const DRONE_SLOTS = [[0, -26], [-12, -22], [12, -22], [-6, -32], [6, -32], [0, -38]];
+const isWorkingDrone = (r) => r.drone && r.session.status === "working";
 const hexDist = (a, b) => {
   const dq = a[0] - b[0], dr = a[1] - b[1];
   return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
@@ -116,7 +119,8 @@ export class World {
       if (!proj) continue;
       proj.label = s.project;
       const station = stationFor(s);
-      const drone = !!(s.parent && parentKeys.has(s.parent));
+      // Sub-agents are always drones, tethered to their parent when it is on the map.
+      const drone = !!s.parent;
       if (!r) {
         const [sx, sy] = proj.stations[station === "dock" ? "dock" : "hub"];
         r = { key: s.key, x: sx, y: sy + 8, tx: sx, ty: sy, phase: Math.random() * 10, born: this.t };
@@ -445,16 +449,7 @@ export class World {
       if (Math.hypot(this.cameraTarget.x - this.cam.x, this.cameraTarget.y - this.cam.y) < 0.1) this.cameraTarget = null;
     }
     for (const r of this.robots.values()) {
-      if (r.drone) {
-        const parent = this.robots.get(r.session.parent);
-        if (parent) {
-          const kids = [...this.robots.values()].filter((d) => d.drone && d.session.parent === r.session.parent);
-          const i = kids.indexOf(r);
-          const a = this.t * 1.6 + (i / Math.max(1, kids.length)) * Math.PI * 2;
-          r.tx = parent.x + Math.cos(a) * 12;
-          r.ty = parent.y - 14 + Math.sin(a) * 5;
-        }
-      }
+      if (r.drone) this.droneTarget(r);
       const dx = r.tx - r.x, dy = r.ty - r.y;
       const d = Math.hypot(dx, dy);
       const sp = (r.drone ? SPEED * 2.5 : SPEED) * dt;
@@ -479,6 +474,30 @@ export class World {
     const h = new Date().getHours() + new Date().getMinutes() / 60;
     // 0 at noon, 1 deep night.
     this.night = h >= 20 || h < 6 ? 1 : h >= 18 ? (h - 18) / 2 : h < 8 ? (8 - h) / 2 : 0;
+  }
+
+  /** Working drones go to the station of their own activity; the rest orbit their parent. */
+  droneTarget(r) {
+    const drones = [...this.robots.values()].filter((d) => d.drone).sort((a, b) => a.key.localeCompare(b.key));
+    if (isWorkingDrone(r)) {
+      const proj = this.projects.get(r.project);
+      const station = r.station === "dock" ? "hub" : r.station;
+      if (proj?.stations[station]) {
+        const [cx, cy] = proj.stations[station];
+        const peers = drones.filter((d) => isWorkingDrone(d) && d.project === r.project && d.station === r.station);
+        const [ox, oy] = DRONE_SLOTS[peers.indexOf(r) % DRONE_SLOTS.length];
+        r.tx = cx + ox;
+        r.ty = cy + oy + Math.sin(this.t * 2 + r.phase) * 1.5;
+        return;
+      }
+    }
+    const parent = this.robots.get(r.session.parent);
+    if (!parent) return;
+    const kids = drones.filter((d) => d.session.parent === r.session.parent && !isWorkingDrone(d));
+    const i = kids.indexOf(r);
+    const a = this.t * 1.2 + (i / Math.max(1, kids.length)) * Math.PI * 2;
+    r.tx = parent.x + Math.cos(a) * 13;
+    r.ty = parent.y - 16 + Math.sin(a) * 5;
   }
 
   // ------------------------------------------------------------ rendering
@@ -546,9 +565,11 @@ export class World {
       }
     }
     for (const r of this.robots.values()) {
-      drawables.push({ y: r.y + (r.drone ? 20 : 0), draw: () => this.drawRobot(g, r, ox, oy) });
+      drawables.push({ y: r.y + (r.drone ? 60 : 0), draw: () => this.drawRobot(g, r, ox, oy) });
     }
     drawables.sort((a, b) => a.y - b.y);
+    // Tethers link a drone that is away working to its parent robot, under the drones themselves.
+    this.drawTethers(g, ox, oy, t);
     for (const d of drawables) d.draw();
 
     // Particles.
@@ -586,16 +607,7 @@ export class World {
     const m = providerMeta(s.provider);
     const x = Math.round(r.x + ox), y = Math.round(r.y + oy);
 
-    if (r.drone) {
-      // Small sub-agent drone.
-      const bob = Math.round(Math.sin(t * 6) * 1);
-      px(g, x - 3, y - 4 + bob, 7, 5, "#161827");
-      px(g, x - 2, y - 3 + bob, 5, 3, st === "offline" ? "#666a80" : m.body);
-      px(g, x, y - 2 + bob, 1, 1, m.eye);
-      px(g, x - 4 + (Math.floor(t * 12) % 2) * 2, y - 6 + bob, 5, 1, "#b9c0d3");
-      px(g, x - 1, y + 3 + bob, 3, 1, "rgba(0,0,0,0.25)");
-      return;
-    }
+    if (r.drone) return this.drawDrone(g, r, x, y, t);
 
     const working = st === "working";
     const atStation = !r.walking;
@@ -626,6 +638,13 @@ export class World {
       px(g, x - 2, ay, 5, 1, c); px(g, x - 1, ay + 1, 3, 1, c); px(g, x, ay + 2, 1, 1, c);
     }
     g.drawImage(sprite, x - 6, y - 16 + bob - lift);
+    // One pip per sub-agent that is still working: work is in flight even if this agent waits.
+    const busyKids = [...this.robots.values()].filter((d) => d.session.parent === r.key && isWorkingDrone(d)).length;
+    for (let i = 0; i < Math.min(3, busyKids); i++) {
+      const py = y - 14 + i * 4 + bob - lift;
+      px(g, x - 11, py, 4, 3, "#161827");
+      px(g, x - 10, py + 1, 2, 1, i === 2 && busyKids > 3 ? "#ffffff" : providerMeta(s.provider).accent);
+    }
     if (onTool) drawToolFx(g, r.station, x + 7, y - 8 + bob - lift, t);
 
     // Bubble.
@@ -638,6 +657,53 @@ export class World {
     else if (working && fresh && cur.kind === "error") drawBubble(g, "error", x + 3, bubbleY, t);
     else if (working && fresh && cur.kind === "user") drawBubble(g, "user", x + 3, bubbleY, t);
     else if (working && atStation && r.station === "hub") drawBubble(g, "think", x + 3, bubbleY, t, m.body);
+  }
+
+  drawTethers(g, ox, oy, t) {
+    for (const r of this.robots.values()) {
+      if (!r.drone) continue;
+      const parent = this.robots.get(r.session.parent);
+      if (!parent) continue;
+      const x0 = r.x, y0 = r.y + 4, x1 = parent.x, y1 = parent.y - 12;
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      if (len < 20) continue;
+      const color = isWorkingDrone(r) ? providerMeta(r.session.provider).accent : "#9aa0c8";
+      // Marching dots from parent to drone: work flowing out.
+      const phase = (t * 8) % 3;
+      g.globalAlpha = 0.9;
+      for (let d = phase; d < len; d += 3) {
+        const k = d / len;
+        px(g, x1 + (x0 - x1) * k + ox, y1 + (y0 - y1) * k + oy, 1, 1, color);
+      }
+      g.globalAlpha = 1;
+    }
+  }
+
+  drawDrone(g, r, x, y, t) {
+    const s = r.session;
+    const st = s.status;
+    const working = st === "working";
+    const bob = Math.round(Math.sin(t * (working ? 7 : 4)) * 1);
+    const sprite = droneSprite({
+      provider: s.provider,
+      rotor: st === "offline" ? 0 : Math.floor(t * (working ? 16 : 8)) % 2,
+      eyes: st === "offline" ? "off" : st === "sleeping" ? "closed" : "open",
+      chest: STATUS[st]?.color || "#46e07a",
+      gray: st === "offline",
+    });
+    // Ground shadow when hovering over a station, a small one when orbiting.
+    px(g, x - 3, y + (working ? 20 : 8), 7, 1, "rgba(0,0,0,0.22)");
+    if (this.selected === r.key) {
+      const c = Math.floor(this.t * 4) % 2 ? "#ffffff" : "#ffd23f";
+      const ay = y - 16 + Math.round(Math.sin(this.t * 6) * 1.5);
+      px(g, x - 2, ay, 5, 1, c); px(g, x - 1, ay + 1, 3, 1, c); px(g, x, ay + 2, 1, 1, c);
+    }
+    g.drawImage(sprite, x - 5, y - 5 + bob);
+    if (!working) return;
+    const cur = s.current;
+    if (r.station === "hub" || r.station === "dock") drawBubble(g, "think", x + 1, y - 7 + bob, t, providerMeta(s.provider).body);
+    else drawToolFx(g, r.station, x + 7, y + 1 + bob, t);
+    if (cur?.kind === "error" && Date.now() - cur.ts < 20000) drawBubble(g, "error", x + 1, y - 7 + bob, t);
   }
 
   drawLabels(ctx, s, ox, oy) {
@@ -682,7 +748,7 @@ export class World {
       if (!r) continue;
       const m = providerMeta(r.session.provider);
       const sx = (r.x + ox) * s, sy = (r.y + oy - 34) * s - tagFont;
-      const text = `${m.short} · ${r.session.title}`.slice(0, 42);
+      const text = `${r.drone ? "SUB-AGENT" : m.short} · ${r.session.title}`.slice(0, 42);
       const w = ctx.measureText(text).width + tagFont;
       const h = tagFont * 1.9;
       ctx.fillStyle = "#161827";

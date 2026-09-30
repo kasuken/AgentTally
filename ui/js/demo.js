@@ -15,11 +15,14 @@ const SEED = [
   { provider: "codex", project: "docs-site", title: "Weekly release notes", model: "gpt-6-luna", status: "working" },
   { provider: "copilot", project: "shop-api", title: "Payment webhook retries", model: "claude-sonnet-5-5", status: "blocked" },
   { provider: "vscode", project: "shop-api", title: "Changelog for v1.3", model: "GPT-6 Luna", status: "waiting" },
-  { provider: "claude", project: "notes-app", title: "Account deletion flow", model: "claude-opus-5-5", status: "working" },
+  { provider: "claude", project: "notes-app", title: "Account deletion flow", model: "claude-opus-5-5", status: "waiting" },
   { provider: "gemini", project: "game-engine", title: "Shader hot reload", model: "gemini-3-pro", status: "idle" },
   { provider: "antigravity", project: "antigravity", title: "Antigravity conversation", status: "sleeping" },
   { provider: "copilot", project: "game-engine", title: "Static site deploy", model: "gpt-6-sol", status: "offline" },
   { provider: "codex", project: "website", title: "Blog post images", model: "gpt-6-luna", status: "working" },
+  // Background sub-agents keep working after their parent handed the turn back.
+  { provider: "claude", project: "notes-app", title: "Write migration tests", model: "claude-sonnet-5-5", status: "working", parentIdx: 5, role: "general-purpose" },
+  { provider: "claude", project: "notes-app", title: "Review API contract", model: "claude-haiku-4-5", status: "working", parentIdx: 5, role: "Explore" },
 ];
 
 const PROMPTS = ["Fix the failing tests", "Add dark mode", "Why is the build slow?", "Ship v0.2", "Refactor the scanner"];
@@ -37,7 +40,7 @@ export function createDemo() {
     branch: i % 3 ? "main" : "feature/hex-world",
     client: null,
     parent: s.parentIdx !== undefined ? `${SEED[s.parentIdx].provider}:demo-${s.parentIdx}` : null,
-    role: s.parentIdx !== undefined ? "subagent" : null,
+    role: s.role || (s.parentIdx !== undefined ? "subagent" : null),
     status: s.status,
     started: start - (20 + i * 13) * 60000,
     lastTs: start - (s.status === "working" ? 2000 : s.status === "idle" ? 40 * 60000 : s.status === "sleeping" ? 5 * 3600000 : 60000),

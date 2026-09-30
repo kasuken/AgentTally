@@ -137,7 +137,19 @@ impl Roots {
                 for (path, _) in recent_files(&sub, since, |n| n.ends_with(".jsonl")) {
                     let mut c = Candidate::new(Format::Claude, "claude", path.clone(), stem(&path));
                     c.parent = Some(file_name(&session_dir));
-                    c.role = Some("subagent".into());
+                    // agent-<id>.meta.json: {"agentType": "general-purpose", "description": "Build backend", ...}
+                    let meta = fs::read_to_string(path.with_extension("meta.json"))
+                        .ok()
+                        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok());
+                    let field = |k: &str| {
+                        meta.as_ref()
+                            .and_then(|m| m.get(k))
+                            .and_then(|v| v.as_str())
+                            .filter(|s| !s.trim().is_empty())
+                            .map(str::to_string)
+                    };
+                    c.title = field("description");
+                    c.role = field("agentType").or_else(|| Some("subagent".into()));
                     out.push(c);
                 }
             }
