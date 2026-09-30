@@ -236,6 +236,14 @@ impl Roots {
             let mut groups: std::collections::BTreeMap<String, Vec<(PathBuf, i64)>> = Default::default();
             for (path, mtime) in recent_files(&base.join("conversations"), 0, |_| true) {
                 let name = file_name(&path);
+                // `-shm` changes whenever anyone reads the database (AgentTally included), and an
+                // empty `-wal` holds nothing new: neither is activity.
+                if name.ends_with("-shm") {
+                    continue;
+                }
+                if name.ends_with("-wal") && fs::metadata(&path).map(|m| m.len() == 0).unwrap_or(true) {
+                    continue;
+                }
                 let id = name.split('.').next().unwrap_or(&name).to_string();
                 groups.entry(id).or_default().push((path, mtime));
             }

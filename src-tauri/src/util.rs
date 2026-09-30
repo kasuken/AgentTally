@@ -169,12 +169,18 @@ pub fn summarize_args(args: &Value) -> String {
         },
         other => other.clone(),
     };
+    // In priority order; matched ignoring case so `CommandLine`/`AbsolutePath` (Antigravity)
+    // work as well as `command`/`file_path` (Claude, Codex, Copilot).
     const KEYS: &[&str] = &[
-        "description", "command", "cmd", "file_path", "filePath", "path", "notebook_path",
-        "pattern", "query", "url", "prompt", "subject", "question", "intent", "skill", "name",
+        "description", "command", "commandline", "cmd", "file_path", "filepath", "path",
+        "absolutepath", "targetfile", "notebook_path", "directorypath", "searchpath",
+        "searchdirectory", "pattern", "query", "url", "prompt", "subject", "question", "intent",
+        "skill", "name",
     ];
+    let Some(obj) = args.as_object() else { return String::new() };
     for key in KEYS {
-        if let Some(v) = args.get(*key) {
+        let found = obj.iter().find(|(k, _)| k.eq_ignore_ascii_case(key)).map(|(_, v)| v);
+        if let Some(v) = found {
             let text = match v {
                 Value::String(t) => t.clone(),
                 Value::Array(a) => a
@@ -187,7 +193,7 @@ pub fn summarize_args(args: &Value) -> String {
             if text.trim().is_empty() {
                 continue;
             }
-            return if key.contains("path") || key.contains("Path") {
+            return if key.contains("path") || key.contains("file") || key.contains("directory") {
                 short_path(&text)
             } else {
                 clip(text.lines().next().unwrap_or(&text), 110)

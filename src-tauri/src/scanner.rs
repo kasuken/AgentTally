@@ -28,6 +28,8 @@ struct Tracked {
     mtime: i64,
     /// Files that count as activity besides `path` (e.g. a SQLite `-wal`).
     companions: Vec<PathBuf>,
+    /// Antigravity: which conversation steps have been read.
+    steps: antigravity::Cursor,
     session: Session,
 }
 
@@ -113,6 +115,7 @@ impl Tracked {
             len: 0,
             mtime: 0,
             companions: c.companions,
+            steps: antigravity::Cursor::new(),
             session,
         }
     }
@@ -136,12 +139,10 @@ impl Tracked {
         match self.format {
             Format::Presence => {}
             Format::Antigravity => {
-                // conversations/<id>.db → the app folder holding the summaries and history.
+                // conversations/<id>.db → the app folder holding conversation_summaries.db.
                 let Some(base) = self.path.parent().and_then(|p| p.parent()) else { return };
-                let id = self.session.id.clone();
-                let summary = antigravity::read_summary(&base.join("conversation_summaries.db"), &id);
-                let prompts = antigravity::read_prompts(&base.join("history.jsonl"), &id);
-                antigravity::apply(&mut self.session, summary, prompts, self.mtime);
+                let summaries = base.join("conversation_summaries.db");
+                antigravity::refresh(&mut self.session, &mut self.steps, &summaries, &self.path, self.mtime);
             }
             Format::Gemini => {
                 if self.len > MAX_DOC {
