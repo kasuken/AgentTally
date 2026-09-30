@@ -1,27 +1,20 @@
-# AgentTally v0.2.0
+# AgentTally v0.2.1
 
-## A Pro view, next to the pixel world
+## Antigravity, step by step
 
-AgentTally now has two interfaces over the same data. The 16-bit hex world stays the default; press **Pro view** in the top bar (or <kbd>U</kbd>) for a calm workspace dashboard:
+Antigravity sessions used to show a single "Running" entry. AgentTally now reads each conversation's steps, so you see what Antigravity is actually doing, in both the Pixel world and the Pro view:
 
-- One panel per project, with approvals and completed turns first.
-- One row per session: status, agent, current activity, a **30-minute activity timeline** coloured by what the agent was doing (think, read, edit, run, web, plan), tool mix, tool count and last seen.
-- Sub-agents indented under their parent session.
-- Search, filters, sorting, session details and the activity log work the same in both views. The selected session and your choice of view are kept.
+- Your prompts, the model's reasoning and its replies.
+- Every tool call on the right station, with the summary Antigravity writes for it: `run_command` at the Terminal ("Run tests"), `view_file`, `grep_search` and `list_dir` at the Library, file writes and edits at the Forge, web searches at the Radar, tasks and timers at Quests.
+- Failed tool calls with their error, and background tasks finishing ("Run dotnet test finished").
+- Tool counts and the tool mix now cover the whole conversation.
 
-![The Pro workspace view](https://raw.githubusercontent.com/kasuken/AgentTally/main/docs/screenshots/pro.png)
-
-## Better Antigravity support
-
-- Each Antigravity conversation now appears **once**. Previously its database and journal files (`.db`, `.db-wal`, `.db-shm`) each showed up as a separate session.
-- Sessions show the conversation **title**, the real **project folder** and the actual **run status** (running, your turn, stopped), read from Antigravity's conversation summaries. Sub-agent conversations appear under their parent, and the prompts you typed in the CLI show up in the activity log.
+Works for both the Antigravity IDE and CLI. New steps are read as they arrive; a step that is still being written is picked up once it is complete.
 
 ## Fixes
 
-- A project used by several agents (for example Claude Code and Copilot Chat in VS Code) now lands on one island instead of two.
-- Project paths from file links keep their leading `/` on macOS and Linux.
-- OpenCode no longer risks showing the same session twice.
-- Also includes everything from v0.1.1: clearer island buildings, separated coastlines and the station guide.
+- Old Antigravity conversations could look like they had just finished ("your turn"). Reading a SQLite database touches its `-shm` file, and AgentTally mistook that for activity. Those files are now ignored, databases without a journal are opened without creating any files, and a finished turn is dated by Antigravity itself.
+- Tool arguments are recognised regardless of letter case, so file paths and commands show up for more agents.
 
 **Supported agents:** Claude Code, Codex, GitHub Copilot CLI, GitHub Copilot Chat (VS Code, Insiders, Cursor, VSCodium), Gemini CLI, Antigravity, plus activity-only support for OpenCode. AgentTally only reads local log files and never sends anything anywhere.
 
