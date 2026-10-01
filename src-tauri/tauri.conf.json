@@ -8,14 +8,33 @@
   },
   "app": {
     "withGlobalTauri": true,
+    "macOSPrivateApi": true,
     "windows": [
       {
+        "label": "main",
         "title": "AgentTally",
         "width": 1440,
         "height": 900,
         "minWidth": 960,
         "minHeight": 600,
         "backgroundColor": "#10131f"
+      },
+      {
+        "label": "buddy",
+        "url": "buddy.html",
+        "title": "AgentTally Buddy",
+        "width": 300,
+        "height": 250,
+        "visible": false,
+        "focus": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false
       }
     ],
     "security": {

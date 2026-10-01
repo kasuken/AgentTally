@@ -1,3 +1,4 @@
+mod buddy;
 mod model;
 mod providers;
 mod scanner;
@@ -37,7 +38,12 @@ pub fn run() {
     }
     tauri::Builder::default()
         .manage(Latest::default())
-        .invoke_handler(tauri::generate_handler![snapshot])
+        .invoke_handler(tauri::generate_handler![snapshot, buddy::show_main])
+        .on_window_event(|window, event| {
+            if window.label() == "main" {
+                buddy::on_main_event(window, event);
+            }
+        })
         .setup(|app| {
             let handle = app.handle().clone();
             let latest = app.state::<Latest>().0.clone();

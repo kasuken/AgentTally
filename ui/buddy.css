@@ -1,0 +1,98 @@
+@font-face {
+  font-family: "Press Start 2P";
+  src: url("fonts/press-start-2p.woff2") format("woff2");
+  font-display: block;
+}
+@font-face {
+  font-family: "VT323";
+  src: url("fonts/vt323.woff2") format("woff2");
+  font-display: block;
+}
+
+:root {
+  --outline: #161827;
+  --paper: #ffffff;
+  --ink: #161827;
+  --accent: #46e07a;
+  --notch: polygon(6px 0, calc(100% - 6px) 0, calc(100% - 6px) 3px, calc(100% - 3px) 3px, calc(100% - 3px) 6px, 100% 6px,
+    100% calc(100% - 6px), calc(100% - 3px) calc(100% - 6px), calc(100% - 3px) calc(100% - 3px), calc(100% - 6px) calc(100% - 3px),
+    calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 3px), 3px calc(100% - 3px), 3px calc(100% - 6px), 0 calc(100% - 6px),
+    0 6px, 3px 6px, 3px 3px, 6px 3px);
+}
+
+/* The window itself is transparent: only the robot and its cloud are visible. */
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.stage {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.cloud {
+  all: unset;
+  display: block;
+  box-sizing: border-box;
+  max-width: calc(100% - 8px);
+  padding: 3px;
+  background: var(--outline);
+  clip-path: var(--notch);
+  cursor: pointer;
+  transform-origin: 50% 100%;
+}
+.cloud.pop { animation: pop 0.28s steps(4) both; }
+@keyframes pop { from { transform: scale(0.85); } to { transform: scale(1); } }
+.cloud-in {
+  display: block;
+  padding: 6px 9px 5px;
+  background: var(--paper);
+  color: var(--ink);
+  clip-path: var(--notch);
+  box-shadow: inset 0 -3px 0 #c9cdd8, inset 4px 0 0 var(--accent);
+}
+.who {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font: 7px/1.4 "Press Start 2P", monospace;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.who i { width: 6px; height: 6px; flex: none; background: var(--accent); }
+.who span { overflow: hidden; text-overflow: ellipsis; }
+.who em { margin-left: auto; padding-left: 6px; font-style: normal; color: #7c7fa8; }
+.what {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  margin-top: 3px;
+  font: 19px/0.95 "VT323", monospace;
+  overflow-wrap: anywhere;
+}
+
+/* Thought trail from the cloud down to the robot's head; it overlaps the empty top of the canvas. */
+.trail { position: relative; z-index: 1; width: 100%; height: 14px; margin-bottom: -38px; pointer-events: none; }
+[hidden] { display: none !important; }
+.trail i {
+  position: absolute;
+  background: var(--paper);
+  box-shadow: 0 0 0 3px var(--outline);
+}
+.trail i:nth-child(1) { left: calc(50% + 6px); top: 2px; width: 6px; height: 6px; }
+.trail i:nth-child(2) { left: calc(50% + 1px); top: 11px; width: 3px; height: 3px; }
+
+#bot {
+  display: block;
+  image-rendering: pixelated;
+  cursor: grab;
+}

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>AgentTally Buddy</title>
+  <!-- Desktop buddy: shown in a transparent, borderless, always-on-top window while the main window is minimized. -->
+  <link rel="stylesheet" href="buddy.css" />
+</head>
+<body>
+  <div class="stage">
+    <button class="cloud" id="cloud" hidden title="Click: next agent · Double-click the robot: open AgentTally">
+      <span class="cloud-in">
+        <span class="who"><i id="who-tag"></i><span id="who"></span><em id="pick"></em></span>
+        <span class="what" id="what"></span>
+      </span>
+    </button>
+    <span class="trail" id="trail" hidden aria-hidden="true"><i></i><i></i></span>
+    <canvas id="bot" title="Drag to move · Double-click: open AgentTally"></canvas>
+  </div>
+  <script type="module" src="js/buddy.js"></script>
+</body>
+</html>
