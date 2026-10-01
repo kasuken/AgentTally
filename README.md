@@ -102,6 +102,18 @@ data and the same controls:
 
 AgentTally remembers your choice of interface. The Pixel world is the default.
 
+## Desktop buddy
+
+Minimize AgentTally and one robot stays on your desktop, above the taskbar and on top of other
+windows, without a window around it. A thought cloud above its head shows what its agent is doing
+right now, and the robot acts it out: the tool animation for each building, waving when it is
+your turn or it needs your OK, reading or relaxing on the beach when idle, `Zzz` when asleep.
+
+- It follows the agent that needs you most. Click the cloud to step through the other agents
+  (`2/5`); after a full round it goes back to **AUTO**.
+- Drag the robot to move it. Double-click it to bring the main window back.
+- Clicks on the empty space around the robot go through to the windows underneath.
+
 ## Session details
 
 Select a robot, a workspace row, a session card or an activity entry to open its details: project
@@ -227,6 +239,7 @@ git tag -a vX.Y.Z -m "AgentTally vX.Y.Z" && git push origin vX.Y.Z
 ```
 src-tauri/src/
   lib.rs            Tauri setup, background scan loop, `snapshot` command, "tally" event
+  buddy.rs          desktop buddy window: shown while the main window is minimized
   scanner.rs        finds session files, tails them incrementally (2 MB replay on first sight;
                     project root, first prompt and parent are read from the head)
   model.rs          Session / Activity / Status, tool → station mapping
@@ -234,6 +247,7 @@ src-tauri/src/
                     read-only via rusqlite)
 ui/
   index.html        one page for both interfaces
+  buddy.html        desktop buddy (with buddy.css and js/buddy.js)
   style.css         Pixel interface (default)
   pro.css           Pro interface, loaded instead of style.css
   js/main.js        data source, counters, session list, details, activity log, interface switch

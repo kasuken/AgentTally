@@ -1,12 +1,14 @@
-# AgentTally v0.2.4
+# AgentTally v0.2.5
 
-## Robots on "Your turn" take a break too
+## A desktop buddy while AgentTally is minimized
 
-In v0.2.3 only idle robots went off to fish, relax on the beach or read. Now a robot whose turn is done ("Your turn") does the same after about 30 seconds. It keeps its yellow "!" bubble while it is out, so you can still see that it is waiting for you. A robot asking for approval stays at the Core, and every robot walks straight back to its station as soon as its session is busy again.
+Minimize AgentTally and one robot stays on your desktop: just the robot, with no window around it, sitting above the taskbar and on top of your other windows. A thought cloud above its head shows what its agent is doing right now ("Edit: src/lib.rs", "Your turn · …", "Needs your OK"), and the robot acts it out with the same animations as on the islands: a hammer at the Forge, typing sparks at the Terminal, waving and hopping when it is your turn, reading or relaxing on the beach when idle, and `Zzz` when asleep.
 
-## Fixes
+- The buddy follows the agent that needs you most. Click the cloud to step through your other agents; after a full round it goes back to **AUTO**.
+- Drag the robot to move it, and double-click it to bring AgentTally back.
+- Clicks on the empty space around the robot go through to the windows underneath, so it never gets in your way.
 
-- **Copilot Chat (VS Code):** a finished chat could keep showing "Working" for up to 20 minutes. VS Code writes the end of a reply after marking the request as finished, and that last part can include one more tool call, which AgentTally mistook for new work. A finished request now stays finished.
+This is a first version. It is tested on Windows; on macOS and Linux the transparent window depends on the system, so please report anything that looks off.
 
 **Supported agents:** Claude Code, Codex, GitHub Copilot CLI, GitHub Copilot Chat (VS Code, Insiders, Cursor, VSCodium), Gemini CLI, Antigravity, plus activity-only support for OpenCode. AgentTally only reads local log files and never sends anything anywhere.
 
