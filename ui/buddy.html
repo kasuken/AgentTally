@@ -10,13 +10,14 @@
 </head>
 <body>
   <div class="stage">
-    <button class="cloud" id="cloud" hidden title="Click: next agent · Double-click the robot: open AgentTally">
+    <button class="cloud" id="cloud" title="Open AgentTally">
       <span class="cloud-in">
-        <span class="who"><i id="who-tag"></i><span id="who"></span><em id="pick"></em></span>
-        <span class="what" id="what"></span>
+        <span class="who" id="summary"></span>
+        <ul class="feed" id="feed"></ul>
+        <span class="more" id="more" hidden></span>
       </span>
     </button>
-    <span class="trail" id="trail" hidden aria-hidden="true"><i></i><i></i></span>
+    <span class="trail" aria-hidden="true"><i></i><i></i></span>
     <canvas id="bot" title="Drag to move · Double-click: open AgentTally"></canvas>
   </div>
   <script type="module" src="js/buddy.js"></script>

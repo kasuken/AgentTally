@@ -8,6 +8,8 @@ export const PROVIDERS = {
   gemini:      { name: "Gemini CLI",   short: "GEMINI",   body: "#5a7ff7", shade: "#3450b3", light: "#9ab5ff", eye: "#ffe27a", accent: "#ffe27a", head: "sparkle" },
   antigravity: { name: "Antigravity",  short: "ANTIGRAV", body: "#2bc4d3", shade: "#17808b", light: "#93f3f9", eye: "#ff7ae0", accent: "#ff7ae0", head: "sparkle", hover: true },
   opencode:    { name: "OpenCode",     short: "OPENCODE", body: "#f2c14e", shade: "#b3842a", light: "#ffe49e", eye: "#1b1b2b", accent: "#ffffff", head: "visor" },
+  // Not an agent: AgentTally's own mascot, the desktop buddy that reports on all the others.
+  tally:       { name: "AgentTally",   short: "TALLY",    body: "#ff6fae", shade: "#c23d7d", light: "#ffb3d4", eye: "#ffffff", accent: "#ffd23f", head: "crown" },
 };
 
 export const providerMeta = (key) =>

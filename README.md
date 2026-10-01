@@ -104,14 +104,18 @@ AgentTally remembers your choice of interface. The Pixel world is the default.
 
 ## Desktop buddy
 
-Minimize AgentTally and one robot stays on your desktop, above the taskbar and on top of other
-windows, without a window around it. A thought cloud above its head shows what its agent is doing
-right now, and the robot acts it out: the tool animation for each building, waving when it is
-your turn or it needs your OK, reading or relaxing on the beach when idle, `Zzz` when asleep.
+Minimize AgentTally and its own robot, pink with a crown, stays on your desktop, above the
+taskbar and on top of other windows, without a window around it. Its thought cloud reports on
+all your agents at once: how many need your OK, have finished their turn, are working or idle,
+then one line per busy agent with its project and what it is doing right now (agents that need
+you first; a line flashes when its agent moves on).
 
-- It follows the agent that needs you most. Click the cloud to step through the other agents
-  (`2/5`); after a full round it goes back to **AUTO**.
-- Drag the robot to move it. Double-click it to bring the main window back.
+The robot acts out the overall picture: it waves and hops when anyone needs you, plays the tool
+animation of the agent that did something last while any are working, reads or relaxes on the
+beach when they are all idle, and shows `Zzz` when they are all asleep.
+
+- Drag the robot to move it. Click the cloud or double-click the robot to bring the main window
+  back.
 - Clicks on the empty space around the robot go through to the windows underneath.
 
 ## Session details

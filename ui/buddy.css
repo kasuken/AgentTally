@@ -42,7 +42,7 @@ html, body {
   all: unset;
   display: block;
   box-sizing: border-box;
-  max-width: calc(100% - 8px);
+  width: calc(100% - 8px);
   padding: 3px;
   background: var(--outline);
   clip-path: var(--notch);
@@ -59,26 +59,35 @@ html, body {
   clip-path: var(--notch);
   box-shadow: inset 0 -3px 0 #c9cdd8, inset 4px 0 0 var(--accent);
 }
+/* Header: how many agents are in each state, most urgent first. */
 .who {
   display: flex;
-  align-items: center;
-  gap: 5px;
+  flex-wrap: wrap;
+  gap: 2px 8px;
   font: 7px/1.4 "Press Start 2P", monospace;
   text-transform: uppercase;
   white-space: nowrap;
 }
-.who i { width: 6px; height: 6px; flex: none; background: var(--accent); }
-.who span { overflow: hidden; text-overflow: ellipsis; }
-.who em { margin-left: auto; padding-left: 6px; font-style: normal; color: #7c7fa8; }
-.what {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
-  margin-top: 3px;
-  font: 19px/0.95 "VT323", monospace;
-  overflow-wrap: anywhere;
+.who b { font-weight: normal; color: var(--c, var(--ink)); text-shadow: 0 1px 0 #161827; }
+
+/* One line per busy agent: who it is and what it is doing right now. */
+.feed { list-style: none; margin: 4px 0 0; padding: 0; }
+.feed li {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin: 0 -4px;
+  padding: 0 4px;
+  font: 18px/1 "VT323", monospace;
+  white-space: nowrap;
 }
+.feed li.fresh { animation: fresh 1.2s steps(6) both; }
+@keyframes fresh { from { background: #fff1a8; } to { background: transparent; } }
+.feed i { width: 6px; height: 6px; flex: none; align-self: center; background: var(--c); box-shadow: 0 0 0 1px var(--outline); }
+.feed b { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; font-weight: normal; color: #5a5f7a; }
+.feed span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.feed li.needs span { color: var(--s); }
+.more { display: block; margin-top: 1px; font: 16px/1 "VT323", monospace; color: #7c7fa8; }
 
 /* Thought trail from the cloud down to the robot's head; it overlaps the empty top of the canvas. */
 .trail { position: relative; z-index: 1; width: 100%; height: 14px; margin-bottom: -38px; pointer-events: none; }

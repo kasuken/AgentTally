@@ -16,12 +16,14 @@ const ANTENNA = {
   visor:   ["......a......", "......k......", "......k......"],
   goggles: [".............", "..a.......a..", "..k.......k.."],
   sparkle: ["......a......", ".....aaa.....", "......a......"],
+  crown:   ["...a..a..a...", "...aaaaaaa...", "...aaaaaaa..."],
 };
 const FACE = {
   star:    [".khhhhhhhhbk.", ".khvvvvvvvbk.", ".kbvevvvevbk.", ".kbvvvvvvvBk."],
   visor:   [".khhhhhhhhbk.", ".kbvvvvvvvbk.", ".kbveeeeevbk.", ".kbvvvvvvvBk."],
   goggles: [".khhhhhhhhbk.", ".kkkkbbbkkkk.", ".kkevkbkevkk.", ".kbkkBBBkkBk."],
   sparkle: [".khhhhhhhhbk.", ".khvvvvvvvbk.", ".kbvevvvevbk.", ".kbvvvevvvBk."],
+  crown:   [".khhhhhhhhbk.", ".khvvvvvvvbk.", ".kbvevvvevbk.", ".kbvveeevvBk."],
 };
 const BODY = [
   "..kkkkkkkkk..",
