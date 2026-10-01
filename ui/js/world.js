@@ -2,7 +2,7 @@
 
 import {
   HEX, TERRAIN, tileSprite, robotSprite, drawBuilding, drawTree, drawRock, drawFlowers,
-  drawToolFx, drawBubble, px, droneSprite,
+  drawToolFx, drawBubble, px, droneSprite, drawLeisure,
 } from "./sprites.js";
 import { providerMeta, stationFor, STATUS } from "./meta.js";
 
@@ -27,6 +27,10 @@ const SPEED = 30; // world px per second
 // Where working sub-agent drones hover, relative to the station they are using.
 const DRONE_SLOTS = [[0, -26], [-12, -22], [12, -22], [-6, -32], [6, -32], [0, -38]];
 const isWorkingDrone = (r) => r.drone && r.session.status === "working";
+// Idle robots stay at the dock for a while, then go fishing, to the beach or read under a tree.
+const LEISURE_DELAY = 30; // seconds idle before the first outing
+const LEISURE_TIME = [40, 80]; // seconds per pastime
+const LEISURE = ["fish", "beach", "read"];
 const hexDist = (a, b) => {
   const dq = a[0] - b[0], dr = a[1] - b[1];
   return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
@@ -39,6 +43,8 @@ function hash(a, b, s = 1) {
   n = (n ^ (n >>> 13)) * 1274126177;
   return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
 }
+// Decoration roll of a coast tile: below 0.28 a tree, below 0.08 two (sand only ever gets rocks).
+const decorRoll = (cell) => hash(cell[0], cell[1], 11);
 
 /** Leave one water hex between each island's two-hex land radius. */
 function flowerCentres(n, aspect = 1.6) {
@@ -155,8 +161,8 @@ export class World {
       const slots = SLOTS[r.station] || SLOTS.default;
       const [ox, oy] = slots[i % slots.length];
       const spill = Math.floor(i / slots.length);
-      r.tx = cx + ox + spill * 4;
-      r.ty = cy + oy + spill * 2;
+      r.slot = [cx + ox + spill * 4, cy + oy + spill * 2];
+      if (!r.leisure) [r.tx, r.ty] = r.slot;
     }
   }
 
@@ -173,7 +179,7 @@ export class World {
         stations[station] = toPx(cell);
         cells.push({ cell, station });
       }
-      this.projects.set(name, { name, index: i, centre: c, stations, cells });
+      this.projects.set(name, { name, index: i, centre: c, stations, cells, shore: [] });
       for (const { cell, station } of cells) land.set(cellKey(cell), { cell, kind: station === "hub" ? "core" : "floor", station });
     });
     // A compact coast keeps projects distinct instead of merging into one continent.
@@ -186,10 +192,19 @@ export class World {
           const k = cellKey(cell);
           if (d !== 2 || land.has(k)) continue;
           const v = hash(cell[0], cell[1]);
-          land.set(k, { cell, kind: v > 0.78 ? "sand" : v > 0.4 ? "meadow" : "grass", decor: v });
+          const kind = v > 0.78 ? "sand" : v > 0.4 ? "meadow" : "grass";
+          land.set(k, { cell, kind, decor: v });
+          // Coast tiles double as leisure spots for idle robots.
+          const [x, y] = toPx(cell), [hx, hy] = p.stations.hub;
+          const len = Math.hypot(x - hx, y - hy);
+          const roll = decorRoll(cell);
+          p.shore.push({ x, y, kind, dr, out: [(x - hx) / len, (y - hy) / len],
+            tree: kind !== "sand" && roll < 0.28, crowded: kind !== "sand" && roll < 0.08 });
         }
       }
     }
+    // Islands may have moved: idle robots pick a new spot on their new island.
+    for (const r of this.robots?.values() ?? []) r.leisure = null;
     // Water ring around land.
     const cells = [...land.values()];
     const water = new Map();
@@ -266,7 +281,7 @@ export class World {
       const [x, y] = toPx(t.cell);
       const lx = Math.round(x - ox), ly = Math.round(y - oy);
       const v = t.decor;
-      const v2 = hash(t.cell[0], t.cell[1], 11);
+      const v2 = decorRoll(t.cell);
       if (t.kind === "sand") {
         if (v2 < 0.3) drawRock(g, lx + 4, ly + 4);
       } else if (v2 < 0.28) {
@@ -450,6 +465,7 @@ export class World {
     }
     for (const r of this.robots.values()) {
       if (r.drone) this.droneTarget(r);
+      else if (r.session) this.leisureTarget(r);
       const dx = r.tx - r.x, dy = r.ty - r.y;
       const d = Math.hypot(dx, dy);
       const sp = (r.drone ? SPEED * 2.5 : SPEED) * dt;
@@ -474,6 +490,52 @@ export class World {
     const h = new Date().getHours() + new Date().getMinutes() / 60;
     // 0 at noon, 1 deep night.
     this.night = h >= 20 || h < 6 ? 1 : h >= 18 ? (h - 18) / 2 : h < 8 ? (8 - h) / 2 : 0;
+  }
+
+  /** Idle robots wander off to a pastime after a while and head straight back when work resumes. */
+  leisureTarget(r) {
+    if (r.session.status !== "idle") {
+      r.idleSince = null;
+      if (r.leisure) { r.leisure = null; if (r.slot) [r.tx, r.ty] = r.slot; }
+      return;
+    }
+    r.idleSince ??= this.t;
+    if (this.t - r.idleSince >= LEISURE_DELAY && (!r.leisure || this.t >= r.leisure.until)) {
+      r.leisure = this.pickLeisure(r);
+      // Nowhere free on the island: try again later.
+      if (!r.leisure) r.idleSince = this.t;
+    }
+    if (r.leisure) { r.tx = r.leisure.x; r.ty = r.leisure.y; }
+    else if (r.slot) [r.tx, r.ty] = r.slot;
+  }
+
+  pickLeisure(r) {
+    const proj = this.projects.get(r.project);
+    if (!proj) return null;
+    const taken = new Set([...this.robots.values()].filter((o) => o !== r && o.leisure && o.project === r.project).map((o) => o.leisure.spot));
+    // The bottom row is behind the project sign; tiles with two trees leave no room.
+    const free = proj.shore.filter((s) => !taken.has(s) && s.dr !== 2 && !s.crowded);
+    const fits = {
+      fish: (s) => Math.abs(s.out[1]) < 0.6 && !s.tree, // a side of the island, facing open water
+      beach: (s) => !s.tree,
+      read: () => true,
+    };
+    const prefer = { fish: () => true, beach: (s) => s.kind === "sand", read: (s) => s.tree };
+    const kinds = LEISURE.filter((k) => k !== r.leisure?.kind).sort(() => Math.random() - 0.5);
+    for (const kind of kinds) {
+      const ok = free.filter(fits[kind]);
+      if (!ok.length) continue;
+      const best = ok.filter(prefer[kind]);
+      const pool = best.length ? best : ok;
+      const spot = pool[Math.floor(Math.random() * pool.length)];
+      const face = kind === "fish" ? (spot.out[0] >= 0 ? 1 : -1) : Math.random() < 0.5 ? 1 : -1;
+      const [x, y] = kind === "fish" ? [spot.x + spot.out[0] * 9, spot.y + spot.out[1] * 9]
+        : kind === "read" && spot.tree ? [spot.x + 3, spot.y + 7] // in the shade, right of the trunk
+        : [spot.x - 3, spot.y + 3];
+      const [lo, hi] = LEISURE_TIME;
+      return { kind, spot, x, y, face, seed: Math.random(), until: this.t + lo + Math.random() * (hi - lo) };
+    }
+    return null;
   }
 
   /** Working drones go to the station of their own activity; the rest orbit their parent. */
@@ -613,10 +675,15 @@ export class World {
     const atStation = !r.walking;
     const onTool = working && atStation && r.station !== "hub" && r.station !== "dock";
     const hover = !!m.hover;
+    // An idle robot that has reached its pastime; hovering robots float instead of sitting.
+    const lz = r.leisure && !r.walking ? r.leisure : null;
+    const seated = lz && lz.kind !== "fish" && !hover;
     const stepFrame = Math.floor(t * 7) % 2;
-    let legs = hover ? (stepFrame ? "hover" : "hover2") : r.walking && stepFrame ? "step" : "stand";
+    let legs = hover ? (stepFrame ? "hover" : "hover2") : seated ? "sit" : r.walking && stepFrame ? "step" : "stand";
     const blink = (t % 4) < 0.12;
-    const eyes = st === "offline" ? "off" : st === "sleeping" || blink ? "closed" : "open";
+    // Soaking up the sun with eyes closed now and then.
+    const basking = lz?.kind === "beach" && (t + lz.seed * 9) % 9 > 6;
+    const eyes = st === "offline" ? "off" : st === "sleeping" || blink || basking ? "closed" : "open";
     const arms = onTool && Math.floor(t * 4) % 2 === 0;
     const sprite = robotSprite({
       provider: s.provider, legs, arms, eyes,
@@ -626,7 +693,7 @@ export class World {
     if (r.walking) bob = stepFrame ? -1 : 0;
     else if (onTool) bob = Math.floor(t * 4) % 2 ? -1 : 0;
     else if (hover) bob = Math.round(Math.sin(t * 3));
-    const lift = hover ? 3 : 0;
+    const lift = hover ? 3 : seated ? -2 : 0;
 
     // Shadow.
     px(g, x - 5, y - 1, 11, 2, "rgba(0,0,0,0.28)");
@@ -637,7 +704,9 @@ export class World {
       const ay = y - 30 - lift + Math.round(Math.sin(this.t * 6) * 1.5);
       px(g, x - 2, ay, 5, 1, c); px(g, x - 1, ay + 1, 3, 1, c); px(g, x, ay + 2, 1, 1, c);
     }
+    if (lz) drawLeisure(g, lz.kind, "back", x, y, lz.face, t, lz.seed);
     g.drawImage(sprite, x - 6, y - 16 + bob - lift);
+    if (lz) drawLeisure(g, lz.kind, "front", x, y + bob - lift, lz.face, t, lz.seed);
     // One pip per sub-agent that is still working: work is in flight even if this agent waits.
     const busyKids = [...this.robots.values()].filter((d) => d.session.parent === r.key && isWorkingDrone(d)).length;
     for (let i = 0; i < Math.min(3, busyKids); i++) {

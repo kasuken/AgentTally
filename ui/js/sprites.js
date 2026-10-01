@@ -35,6 +35,7 @@ const LEGS = {
   step:  ["...kMk..kMk..", "...kk....kk.."],
   hover: [".....kMMk....", "......ff....."],
   hover2:[".....kMMk....", ".....f..f...."],
+  sit:   ["..kMMk.kMMk..", "............."], // feet towards the viewer; drawn 2px lower
 };
 const BODY_UP = [ // arms raised (working)
   "mkkkkkkkkkkkm",
@@ -555,6 +556,81 @@ export function drawToolFx(g, station, x, y, t) {
     case "tasks": // note
       px(g, x - 1, y - 1 - swing, 4, 3, "#ffe066");
       break;
+  }
+}
+
+// ---------------------------------------------------------------- leisure (idle robots)
+
+function line(g, x0, y0, x1, y1, color) {
+  const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+  for (let i = 0; i <= n; i++) px(g, x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n, 1, 1, color);
+}
+
+/**
+ * Props for an idle robot's pastime: "fish" | "beach" | "read". (x, y) are the robot's feet,
+ * `f` the side it faces (1 right, -1 left), `seed` desynchronises robots. The "back" layer is
+ * drawn before the robot sprite, the "front" layer after it.
+ */
+export function drawLeisure(g, kind, layer, x, y, f, t, seed) {
+  if (kind === "beach") {
+    if (layer === "back") {
+      // Umbrella behind, towel under the robot.
+      const ux = x - f * 8;
+      px(g, ux, y - 21, 1, 21, "#e8e2d0");
+      [[5, 23], [9, 22], [13, 21]].forEach(([w, dy], row) => {
+        for (let i = 0; i < w; i++) px(g, ux - (w >> 1) + i, y - dy, 1, 1, row === 0 && (i === 0 || i === w - 1) ? OUTLINE : ((i + row) >> 1) % 2 ? "#ffffff" : "#ff5a6a");
+      });
+      px(g, ux - 6, y - 20, 13, 1, OUTLINE);
+      px(g, x - 7, y - 1, 14, 3, "#235fa6");
+      for (let i = 0; i < 14; i += 3) px(g, x - 7 + i, y - 1, 1, 3, "#9ae6ff");
+      return;
+    }
+    // A cold drink, sipped now and then.
+    const sip = (t + seed * 6) % 6 < 1;
+    const gx = x + f * (sip ? 3 : 6) - 1, gy = y - (sip ? 10 : 6);
+    px(g, gx, gy, 3, 4, OUTLINE);
+    px(g, gx + 1, gy + 1, 1, 2, "#ffb347");
+    px(g, gx + 1, gy, 1, 1, "#fff1c2");
+    px(g, gx + 2, gy - 2, 1, 2, "#ff8ad8");
+    return;
+  }
+  if (layer === "back") return;
+  if (kind === "read") {
+    const flip = (t + seed * 5) % 5;
+    const cover = ["#3a8ff0", "#e07a4f", "#46e07a", "#9b6df2"][Math.floor(seed * 4) % 4];
+    px(g, x - 5, y - 8, 11, 6, OUTLINE);
+    px(g, x - 4, y - 3, 9, 1, cover);
+    px(g, x - 4, y - 7, 4, 4, "#fff4d6");
+    px(g, x + 1, y - 7, 4, 4, "#fff4d6");
+    for (let i = 0; i < 3; i++) { px(g, x - 3, y - 6 + i, 2, 1, "#b9c0d3"); px(g, x + 2, y - 6 + i, 2, 1, "#b9c0d3"); }
+    // Turning a page.
+    if (flip < 0.5) px(g, x + 4 - Math.floor(flip * 16), y - 7, 1, 4, "#ffffff");
+    return;
+  }
+  // Fishing: rod from the hand, line to a bobber in the water, the odd fish jumping out.
+  const hx = x + f * 6, hy = y - 6;
+  const tx = x + f * 15, ty = y - 17;
+  line(g, hx, hy, tx, ty, "#8a5a2b");
+  const k = (t + seed * 10) % 10;
+  const bx = x + f * 22;
+  const dip = k >= 7 && k < 7.8;
+  const by = y + 3 + (dip ? 1 : Math.round(Math.sin(t * 2.5 + seed * 6) * 0.6));
+  g.globalAlpha = 0.7;
+  line(g, tx, ty, bx, by - 1, "#dfe3ee");
+  g.globalAlpha = 1;
+  if (k < 7.8 || k >= 9.2) {
+    px(g, bx, by - 1, 2, 1, "#ff5a6a");
+    px(g, bx, by, 2, 1, "#ffffff");
+  }
+  if (dip || (k % 3) < 0.6) { px(g, bx - 3, by + 1, 2, 1, "#8cc4f5"); px(g, bx + 3, by + 1, 2, 1, "#8cc4f5"); }
+  if (k >= 7.8 && k < 9.2) {
+    // The catch arcs out of the water and splashes back.
+    const u = (k - 7.8) / 1.4;
+    const fx = bx + f * Math.round(u * 8), fy = by - Math.round(Math.sin(u * Math.PI) * 11);
+    px(g, fx - 1, fy, 4, 2, "#b9e3ff");
+    px(g, fx + (f > 0 ? 3 : -2), fy - 1, 1, 4, "#86c1ff");
+    px(g, fx + (f > 0 ? 0 : 2), fy, 1, 1, OUTLINE);
+    if (u < 0.15 || u > 0.85) { px(g, bx - 2, by - 2, 1, 1, "#ffffff"); px(g, bx + 3, by - 2, 1, 1, "#ffffff"); }
   }
 }
 

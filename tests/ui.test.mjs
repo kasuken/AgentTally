@@ -110,6 +110,31 @@ test('each project remains a separate island with all seven stations', () => {
   for (const project of world.projects.values()) assert.equal(Object.keys(project.stations).length, 7);
 });
 
+test('idle robots wait at the dock, then take up a pastime on their island until work resumes', () => {
+  const world = Object.assign(Object.create(World.prototype), {
+    projectOrder:['app'], projects:new Map(), robots:new Map(), cw:1200, ch:700, userPan:true, renderTerrain(){}, t:0, paused:false, fx:[],
+  });
+  world.layout();
+  const proj = world.projects.get('app');
+  const robot = {key:'r', x:0, y:0, project:'app', station:'dock', drone:false, session:session('r','idle')};
+  world.robots.set('r', robot);
+  world.assignSlots();
+  const slot = [...robot.slot];
+  world.update(.03);
+  assert.equal(robot.leisure, undefined, 'not straight away');
+  world.t = 31; world.update(.03);
+  assert.ok(['fish','beach','read'].includes(robot.leisure?.kind));
+  assert.ok(proj.shore.includes(robot.leisure.spot), 'on its own island');
+  assert.notEqual(robot.leisure.spot.dr, 2, 'not hidden behind the project sign');
+  assert.deepEqual([robot.tx, robot.ty], [robot.leisure.x, robot.leisure.y]);
+  const first = robot.leisure.kind;
+  world.t = robot.leisure.until + 1; world.update(.03);
+  assert.notEqual(robot.leisure.kind, first, 'a different pastime next');
+  robot.session = session('r','working'); world.update(.03);
+  assert.equal(robot.leisure, null);
+  assert.deepEqual([robot.tx, robot.ty], slot);
+});
+
 // ---------------------------------------------------------------- pro workspace board
 import { groupProjects, timelineTicks, eventTone, TIMELINE_MS } from '../ui/js/board.js';
 
