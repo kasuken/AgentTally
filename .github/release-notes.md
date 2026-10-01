@@ -1,14 +1,12 @@
-# AgentTally v0.2.3
+# AgentTally v0.2.4
 
-## Idle robots take a break
+## Robots on "Your turn" take a break too
 
-In the Pixel world, idle agents no longer stand still at the dock. After about 30 seconds of being idle, a robot heads out to the coast of its island and picks a pastime:
+In v0.2.3 only idle robots went off to fish, relax on the beach or read. Now a robot whose turn is done ("Your turn") does the same after about 30 seconds. It keeps its yellow "!" bubble while it is out, so you can still see that it is waiting for you. A robot asking for approval stays at the Core, and every robot walks straight back to its station as soon as its session is busy again.
 
-- **Fishing** from the side of the island, with a rod, a bobber in the water and the occasional fish jumping out.
-- **The beach:** relaxing on a towel under an umbrella with a cold drink, eyes closed in the sun now and then.
-- **Reading** a book in the shade of a tree.
+## Fixes
 
-Every 40 to 80 seconds a robot moves on to another pastime. As soon as its session is busy again, it walks straight back to its station. Agents that need you (waiting or asking for approval) stay at the Core where you can see them, sleeping and offline agents stay at the dock, and islands still disappear after inactivity exactly as before. With motion paused, robots stay where they are.
+- **Copilot Chat (VS Code):** a finished chat could keep showing "Working" for up to 20 minutes. VS Code writes the end of a reply after marking the request as finished, and that last part can include one more tool call, which AgentTally mistook for new work. A finished request now stays finished.
 
 **Supported agents:** Claude Code, Codex, GitHub Copilot CLI, GitHub Copilot Chat (VS Code, Insiders, Cursor, VSCodium), Gemini CLI, Antigravity, plus activity-only support for OpenCode. AgentTally only reads local log files and never sends anything anywhere.
 
