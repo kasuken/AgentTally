@@ -1,17 +1,14 @@
-# AgentTally v0.2.2
+# AgentTally v0.2.3
 
-## See what your sub-agents are doing
+## Idle robots take a break
 
-When an agent hands work to sub-agents (for example Claude Code background agents), the main agent can already be waiting for you while its sub-agents keep working. AgentTally now makes that visible:
+In the Pixel world, idle agents no longer stand still at the dock. After about 30 seconds of being idle, a robot heads out to the coast of its island and picks a pastime:
 
-- **Pixel world:** a working sub-agent drone flies to the station of its *own* activity (the Forge while writing, the Terminal while running commands, the Library while reading) with a dotted tether back to its parent. Idle drones return to orbit their parent. Drones have a new sprite with a rotor, agent colours and a status light, and the parent robot shows one pip per busy sub-agent.
-- **Party list:** sub-agents are nested directly under their parent with a connector, a drone portrait, a SUB-AGENT tag and their role. The parent card says "2 sub-agents working". Session details show which agent a sub-agent belongs to, and how many sub-agents a parent has.
-- **Pro view:** sub-agent rows are badged "Sub-agent · role" and parents show how many of their sub-agents are working.
-- **Better names:** Claude Code sub-agents are named after their task ("Build backend foundation") instead of the first line of their prompt.
+- **Fishing** from the side of the island, with a rod, a bobber in the water and the occasional fish jumping out.
+- **The beach:** relaxing on a towel under an umbrella with a cold drink, eyes closed in the sun now and then.
+- **Reading** a book in the shade of a tree.
 
-## Fixes
-
-- Claude Code agents no longer jump back to the Core after every tool result; they stay at the tool's station until their next step.
+Every 40 to 80 seconds a robot moves on to another pastime. As soon as its session is busy again, it walks straight back to its station. Agents that need you (waiting or asking for approval) stay at the Core where you can see them, sleeping and offline agents stay at the dock, and islands still disappear after inactivity exactly as before. With motion paused, robots stay where they are.
 
 **Supported agents:** Claude Code, Codex, GitHub Copilot CLI, GitHub Copilot Chat (VS Code, Insiders, Cursor, VSCodium), Gemini CLI, Antigravity, plus activity-only support for OpenCode. AgentTally only reads local log files and never sends anything anywhere.
 
