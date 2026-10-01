@@ -1,14 +1,14 @@
-# AgentTally v0.2.5
+# AgentTally v0.2.6
 
-## A desktop buddy while AgentTally is minimized
+## One desktop buddy for all your agents
 
-Minimize AgentTally and one robot stays on your desktop: just the robot, with no window around it, sitting above the taskbar and on top of your other windows. A thought cloud above its head shows what its agent is doing right now ("Edit: src/lib.rs", "Your turn · …", "Needs your OK"), and the robot acts it out with the same animations as on the islands: a hammer at the Forge, typing sparks at the Terminal, waving and hopping when it is your turn, reading or relaxing on the beach when idle, and `Zzz` when asleep.
+The desktop buddy from v0.2.5 showed one agent at a time. Now it is AgentTally's own robot, pink with a gold crown, and it reports on all your agents at once while AgentTally is minimized.
 
-- The buddy follows the agent that needs you most. Click the cloud to step through your other agents; after a full round it goes back to **AUTO**.
-- Drag the robot to move it, and double-click it to bring AgentTally back.
-- Clicks on the empty space around the robot go through to the windows underneath, so it never gets in your way.
+- **The cloud** starts with a count of your agents by state (needs OK, your turn, working, idle), then lists what each busy agent is doing right now, with its project: "AgentTally · Edit: src/lib.rs", "shop-api · your turn". Agents that need you come first, up to four lines, then "+N more busy". A line flashes when its agent moves on to something new.
+- **The robot** acts out the overall picture: it waves and hops when any agent needs you, plays the tool animation of whichever agent acted last while any are working, reads or relaxes on the beach when they are all idle, and shows `Zzz` when they are all asleep.
+- Click the cloud or double-click the robot to bring AgentTally back. Drag the robot to move it. Clicks on the empty space around it still go through to the windows underneath.
 
-This is a first version. It is tested on Windows; on macOS and Linux the transparent window depends on the system, so please report anything that looks off.
+The buddy is tested on Windows; on macOS and Linux the transparent window depends on the system, so please report anything that looks off.
 
 **Supported agents:** Claude Code, Codex, GitHub Copilot CLI, GitHub Copilot Chat (VS Code, Insiders, Cursor, VSCodium), Gemini CLI, Antigravity, plus activity-only support for OpenCode. AgentTally only reads local log files and never sends anything anywhere.
 
