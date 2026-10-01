@@ -15,6 +15,8 @@ pub fn apply(sess: &mut Session, v: &Value) {
         .and_then(Value::as_array)
         .map(|a| a.iter().filter_map(Value::as_str).collect())
         .unwrap_or_default();
+    // `["requests", 3, "response"]` → 3 (the string key above leaves the numbers out).
+    let index = v.get("k").and_then(Value::as_array).and_then(|a| a.iter().find_map(Value::as_u64));
     // Older builds wrote the whole session as a single JSON document.
     if v.get("kind").is_none() && v.get("requests").is_some() {
         return snapshot(sess, v);
@@ -27,8 +29,15 @@ pub fn apply(sess: &mut Session, v: &Value) {
                     sess.title = Some(t.to_string());
                 }
             }
-            Some("modelState") => model_state(sess, body),
-            Some("result") => done(sess),
+            Some("modelState") => {
+                if model_state(sess, body) {
+                    finished(sess, index);
+                }
+            }
+            Some("result") => {
+                done(sess);
+                finished(sess, index);
+            }
             Some("selectedModel") => model(sess, body),
             _ => {}
         },
@@ -41,6 +50,10 @@ pub fn apply(sess: &mut Session, v: &Value) {
             [.., "response"] => {
                 for part in body.as_array().into_iter().flatten() {
                     response_part(sess, part);
+                }
+                // VS Code writes the final response after the result; it must not reopen the turn.
+                if index.is_some() && sess.finished_request >= index {
+                    done(sess);
                 }
             }
             _ => {}
@@ -57,8 +70,10 @@ fn snapshot(sess: &mut Session, body: &Value) {
     if let Some(m) = body.pointer("/inputState/selectedModel") {
         model(sess, m);
     }
-    for r in body.get("requests").and_then(Value::as_array).into_iter().flatten() {
-        request(sess, r);
+    for (i, r) in body.get("requests").and_then(Value::as_array).into_iter().flatten().enumerate() {
+        if request(sess, r) {
+            finished(sess, Some(i as u64));
+        }
     }
 }
 
@@ -72,7 +87,8 @@ fn model(sess: &mut Session, m: &Value) {
     }
 }
 
-fn request(sess: &mut Session, r: &Value) {
+/// Reads one request; returns whether it has already finished.
+fn request(sess: &mut Session, r: &Value) -> bool {
     let ts = ts_of(r.get("timestamp"));
     let text = r.pointer("/message/text").and_then(Value::as_str).unwrap_or("");
     if let Some(t) = clean_prompt(text) {
@@ -82,16 +98,27 @@ fn request(sess: &mut Session, r: &Value) {
         response_part(sess, part);
     }
     if let Some(ms) = r.get("modelState") {
-        model_state(sess, ms);
+        model_state(sess, ms)
     } else if r.get("result").map(|x| !x.is_null()).unwrap_or(false) {
         done(sess);
+        true
+    } else {
+        false
     }
 }
 
-fn model_state(sess: &mut Session, ms: &Value) {
+/// Closes the turn when the model state says the request is complete; returns whether it is.
+fn model_state(sess: &mut Session, ms: &Value) -> bool {
     let finished = ms.get("completedAt").is_some() || ms.get("value").and_then(Value::as_u64).unwrap_or(0) > 0;
     if finished {
         done(sess);
+    }
+    finished
+}
+
+fn finished(sess: &mut Session, request: Option<u64>) {
+    if request.is_some() {
+        sess.finished_request = sess.finished_request.max(request);
     }
 }
 
@@ -192,6 +219,31 @@ pub fn workspace_folder(path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn final_response_written_after_the_result_does_not_reopen_the_turn() {
+        use crate::model::Status;
+        let mut sess = Session::new("vscode", "x");
+        let tool = serde_json::json!({ "kind": "toolInvocationSerialized", "toolId": "run_in_terminal", "isComplete": true });
+        for line in [
+            serde_json::json!({ "kind": 2, "k": ["requests"], "v": [{ "timestamp": 1_000, "message": { "text": "Publish it" }, "response": [], "modelState": { "value": 0 } }] }),
+            serde_json::json!({ "kind": 2, "k": ["requests", 0, "response"], "v": [tool.clone()] }),
+            serde_json::json!({ "kind": 1, "k": ["requests", 0, "result"], "v": { "timings": {} } }),
+            serde_json::json!({ "kind": 1, "k": ["requests", 0, "modelState"], "v": { "value": 1, "completedAt": 2_000 } }),
+            // VS Code appends the final response parts, tool calls included, after the result.
+            serde_json::json!({ "kind": 2, "k": ["requests", 0, "response"], "v": [{ "value": "Published." }, tool] }),
+        ] {
+            apply(&mut sess, &line);
+        }
+        assert!(!sess.turn_open);
+        assert_eq!(sess.status(sess.last_ts + 3 * 60_000), Status::Waiting);
+
+        // The next request opens a new turn as usual.
+        let next = sess.last_ts + 1;
+        apply(&mut sess, &serde_json::json!({ "kind": 2, "k": ["requests"], "v": [{ "timestamp": next, "message": { "text": "Again" }, "response": [], "modelState": { "value": 0 } }] }));
+        apply(&mut sess, &serde_json::json!({ "kind": 2, "k": ["requests", 1, "response"], "v": [{ "kind": "toolInvocationSerialized", "toolId": "read_file" }] }));
+        assert!(sess.turn_open);
+    }
 
     #[test]
     fn strips_file_links() {

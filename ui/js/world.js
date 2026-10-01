@@ -27,8 +27,10 @@ const SPEED = 30; // world px per second
 // Where working sub-agent drones hover, relative to the station they are using.
 const DRONE_SLOTS = [[0, -26], [-12, -22], [12, -22], [-6, -32], [6, -32], [0, -38]];
 const isWorkingDrone = (r) => r.drone && r.session.status === "working";
-// Idle robots stay at the dock for a while, then go fishing, to the beach or read under a tree.
-const LEISURE_DELAY = 30; // seconds idle before the first outing
+// Robots with nothing to do (idle, or done and waiting for you) stay put for a while, then go
+// fishing, to the beach or read under a tree. Waiting robots keep their "your turn" bubble.
+const AT_LEISURE = new Set(["idle", "waiting"]);
+const LEISURE_DELAY = 30; // seconds with nothing to do before the first outing
 const LEISURE_TIME = [40, 80]; // seconds per pastime
 const LEISURE = ["fish", "beach", "read"];
 const hexDist = (a, b) => {
@@ -492,9 +494,9 @@ export class World {
     this.night = h >= 20 || h < 6 ? 1 : h >= 18 ? (h - 18) / 2 : h < 8 ? (8 - h) / 2 : 0;
   }
 
-  /** Idle robots wander off to a pastime after a while and head straight back when work resumes. */
+  /** Robots with nothing to do wander off to a pastime after a while and head straight back when work resumes. */
   leisureTarget(r) {
-    if (r.session.status !== "idle") {
+    if (!AT_LEISURE.has(r.session.status)) {
       r.idleSince = null;
       if (r.leisure) { r.leisure = null; if (r.slot) [r.tx, r.ty] = r.slot; }
       return;

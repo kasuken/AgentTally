@@ -135,6 +135,27 @@ test('idle robots wait at the dock, then take up a pastime on their island until
   assert.deepEqual([robot.tx, robot.ty], slot);
 });
 
+test('a robot whose turn is done goes out too, and an approval request keeps it at the core', () => {
+  const world = Object.assign(Object.create(World.prototype), {
+    projectOrder:['app'], projects:new Map(), robots:new Map(), cw:1200, ch:700, userPan:true, renderTerrain(){}, t:0, paused:false, fx:[],
+  });
+  world.layout();
+  const robot = {key:'r', x:0, y:0, project:'app', station:'hub', drone:false, session:session('r','waiting')};
+  world.robots.set('r', robot);
+  world.assignSlots();
+  world.update(.03);
+  world.t = 31; world.update(.03);
+  assert.ok(robot.leisure, 'waiting for you counts as nothing to do');
+  // Waiting turning into idle keeps the outing going.
+  const outing = robot.leisure;
+  robot.session = session('r','idle'); world.update(.03);
+  assert.equal(robot.leisure, outing);
+  robot.session = session('r','blocked'); world.update(.03);
+  assert.equal(robot.leisure, null);
+  world.t = 100; world.update(.03);
+  assert.equal(robot.leisure, null);
+});
+
 // ---------------------------------------------------------------- pro workspace board
 import { groupProjects, timelineTicks, eventTone, TIMELINE_MS } from '../ui/js/board.js';
 

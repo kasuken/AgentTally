@@ -141,6 +141,8 @@ pub struct Session {
     pub station_counts: [u32; 6],
     pub events: VecDeque<Activity>,
     pub last_usage_id: Option<String>,
+    /// VS Code: index of the latest request whose result has arrived.
+    pub finished_request: Option<u64>,
 }
 
 impl Session {
