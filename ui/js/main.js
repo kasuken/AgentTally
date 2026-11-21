@@ -1,6 +1,7 @@
 // Local-only dashboard controller. UI filters never change the underlying sessions.
 import { World } from "./world.js";
 import { Yard } from "./yard.js";
+import { Office } from "./office.js";
 import { Board } from "./board.js";
 import { robotSprite, droneSprite, drawBuilding } from "./sprites.js";
 import { providerMeta, STATUS, STATUS_TEXT, STATIONS, KIND_ICON, ago, compact, describe, escapeHtml as esc } from "./meta.js";
@@ -29,13 +30,20 @@ function onSelect(key) {
   board.setSelected(key);
   renderSide(); renderRoster();
 }
-// Prototype: ?yard (or Y, remembered) swaps the hex world for the Freight Yard renderer.
-const yardParam = new URLSearchParams(location.search).get("yard");
-const yardMode = yardParam !== null ? yardParam !== "0" : load("tally.map", "world") === "yard";
-const world = new (yardMode ? Yard : World)($("world"), { onSelect });
-if (yardMode) {
-  $("world").setAttribute("aria-label", "Animated freight yard: one depot per project, one truck per session. Use the party list to inspect agents with a keyboard.");
-  document.querySelector(".map-bottom .hint").textContent = "Drag to pan · Wheel to zoom · Click a truck · Y: hex world";
+// Prototype maps for the Pixel interface: ?map=world|yard|office (?yard still works), or Y to cycle (remembered).
+const MAPS = {
+  world: { View: World },
+  yard: { View: Yard, label: "Animated freight yard: one depot per project, one truck per session.", hint: "Click a truck · Y: office" },
+  office: { View: Office, label: "Animated office: one team pod per project, one robot employee per session.", hint: "Click an agent · Y: hex world" },
+};
+const MAP_ORDER = ["world", "yard", "office"];
+const mapParams = new URLSearchParams(location.search);
+let mapMode = mapParams.get("map") ?? (mapParams.has("yard") ? (mapParams.get("yard") === "0" ? "world" : "yard") : load("tally.map", "world"));
+if (!MAPS[mapMode]) mapMode = "world";
+const world = new MAPS[mapMode].View($("world"), { onSelect });
+if (MAPS[mapMode].label) {
+  $("world").setAttribute("aria-label", `${MAPS[mapMode].label} Use the party list to inspect agents with a keyboard.`);
+  document.querySelector(".map-bottom .hint").textContent = `Drag to pan · Wheel to zoom · ${MAPS[mapMode].hint}`;
 }
 const board = new Board($("board"), { onSelect, now });
 // "pixel" is the 16-bit world (default); "pro" is the workspace board. Same data, same filters.
@@ -358,8 +366,8 @@ addEventListener("keydown", (e) => {
   if (e.key.toLowerCase() === "f") view().recenter();
   if (e.key.toLowerCase() === "u") $("ui-toggle").click();
   if (e.key.toLowerCase() === "y" && ui === "pixel") {
-    save("tally.map", yardMode ? "world" : "yard");
-    const url = new URL(location.href); url.searchParams.delete("yard");
+    save("tally.map", MAP_ORDER[(MAP_ORDER.indexOf(mapMode) + 1) % MAP_ORDER.length]);
+    const url = new URL(location.href); url.searchParams.delete("yard"); url.searchParams.delete("map");
     location.replace(url);
   }
   if (e.key === "?") $("help").showModal();
