@@ -1,5 +1,6 @@
 // Local-only dashboard controller. UI filters never change the underlying sessions.
 import { World } from "./world.js";
+import { Yard } from "./yard.js";
 import { Board } from "./board.js";
 import { robotSprite, droneSprite, drawBuilding } from "./sprites.js";
 import { providerMeta, STATUS, STATUS_TEXT, STATIONS, KIND_ICON, ago, compact, describe, escapeHtml as esc } from "./meta.js";
@@ -28,7 +29,14 @@ function onSelect(key) {
   board.setSelected(key);
   renderSide(); renderRoster();
 }
-const world = new World($("world"), { onSelect });
+// Prototype: ?yard (or Y, remembered) swaps the hex world for the Freight Yard renderer.
+const yardParam = new URLSearchParams(location.search).get("yard");
+const yardMode = yardParam !== null ? yardParam !== "0" : load("tally.map", "world") === "yard";
+const world = new (yardMode ? Yard : World)($("world"), { onSelect });
+if (yardMode) {
+  $("world").setAttribute("aria-label", "Animated freight yard: one depot per project, one truck per session. Use the party list to inspect agents with a keyboard.");
+  document.querySelector(".map-bottom .hint").textContent = "Drag to pan · Wheel to zoom · Click a truck · Y: hex world";
+}
 const board = new Board($("board"), { onSelect, now });
 // "pixel" is the 16-bit world (default); "pro" is the workspace board. Same data, same filters.
 const UIS = ["pixel", "pro"];
@@ -349,6 +357,11 @@ addEventListener("keydown", (e) => {
   if (e.key === "/") { e.preventDefault(); $("search").focus(); }
   if (e.key.toLowerCase() === "f") view().recenter();
   if (e.key.toLowerCase() === "u") $("ui-toggle").click();
+  if (e.key.toLowerCase() === "y" && ui === "pixel") {
+    save("tally.map", yardMode ? "world" : "yard");
+    const url = new URL(location.href); url.searchParams.delete("yard");
+    location.replace(url);
+  }
   if (e.key === "?") $("help").showModal();
 });
 setInterval(() => {
