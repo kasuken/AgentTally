@@ -72,13 +72,14 @@ function flowerCentres(n, aspect = 1.6) {
 }
 
 export class World {
-  constructor(canvas, { onSelect, onHover } = {}) {
+  constructor(canvas, { onSelect, onHover, onCinemaStop } = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.buf = document.createElement("canvas");
     this.bctx = this.buf.getContext("2d");
     this.onSelect = onSelect || (() => {});
     this.onHover = onHover || (() => {});
+    this.onCinemaStop = onCinemaStop || (() => {});
     this.projects = new Map(); // name -> { index, centre, cells }
     this.projectOrder = [];
     this.robots = new Map();
@@ -96,6 +97,7 @@ export class World {
     this.paused = false;
     this.dirty = true;
     this.cameraTarget = null;
+    this.cinema = null;
     this.bindInput();
     this.resize();
     new ResizeObserver(() => this.resize()).observe(canvas.parentElement);
@@ -322,6 +324,7 @@ export class World {
   }
 
   recenter() {
+    this.stopCinema();
     this.userPan = false;
     this.userZoom = false;
     this.fit();
@@ -334,6 +337,7 @@ export class World {
   }
 
   focus(key) {
+    this.stopCinema();
     const r = this.robots.get(key);
     if (!r) return;
     if (this.scale < 2) {
@@ -348,12 +352,14 @@ export class World {
   }
 
   setPaused(paused) {
+    if (paused) this.stopCinema();
     this.paused = paused;
     this.fx = [];
     this.dirty = true;
   }
 
   zoom(direction, anchor) {
+    this.stopCinema();
     const old = this.scale;
     const next = Math.max(0.1, Math.min(7, old * (direction > 0 ? 1.25 : 0.8)));
     if (anchor) {
@@ -366,6 +372,74 @@ export class World {
     this.userPan = true;
     this.dirty = true;
     this.sizeBuffer();
+  }
+
+  startCinema() {
+    if (this.paused || this.cinema) return;
+    this.cameraTarget = null;
+    this.cinema = { phase: "wait", elapsed: 0, lastKey: null };
+  }
+
+  stopCinema() {
+    if (!this.cinema) return;
+    this.cinema = null;
+    this.onCinemaStop();
+  }
+
+  updateCinema(dt) {
+    const c = this.cinema;
+    if (!c) return;
+    c.elapsed += dt;
+    if (c.phase === "wait") {
+      if (c.elapsed < 12) return;
+      const candidates = [...this.robots.values()]
+        .filter((r) => r.session && ["blocked", "working"].includes(r.session.status))
+        .sort((a, b) => (a.session.status === "blocked" ? 0 : 1) - (b.session.status === "blocked" ? 0 : 1) || a.key.localeCompare(b.key));
+      if (!candidates.length) { c.elapsed = 0; return; }
+      const index = candidates.findIndex((r) => r.key === c.lastKey);
+      const robot = candidates[(index + 1) % candidates.length];
+      c.lastKey = c.key = robot.key;
+      c.overview = { x: this.cam.x, y: this.cam.y, scale: this.scale, userPan: this.userPan, userZoom: this.userZoom };
+      c.from = { ...c.overview };
+      c.to = { x: robot.x, y: robot.y - 10, scale: Math.max(this.scale, Math.min(2, this.cw / 160, this.ch / 120)) };
+      c.phase = "in"; c.elapsed = 0;
+      this.userPan = this.userZoom = true;
+    } else if (c.phase === "hold") {
+      const robot = this.robots.get(c.key);
+      if (c.elapsed < 6 && robot) {
+        const blend = 1 - Math.exp(-2 * dt);
+        this.cam.x += (robot.x - this.cam.x) * blend;
+        this.cam.y += (robot.y - 10 - this.cam.y) * blend;
+        return;
+      }
+      c.from = { x: this.cam.x, y: this.cam.y, scale: this.scale };
+      c.to = c.overview;
+      c.phase = "out"; c.elapsed = 0;
+    }
+    if (c.phase === "in" || c.phase === "out") {
+      if (c.phase === "in" && !this.robots.has(c.key)) {
+        c.from = { x: this.cam.x, y: this.cam.y, scale: this.scale };
+        c.to = c.overview; c.phase = "out"; c.elapsed = 0;
+      }
+      if (c.phase === "in") {
+        const robot = this.robots.get(c.key);
+        c.to.x = robot.x; c.to.y = robot.y - 10;
+      }
+      const t = Math.min(1, c.elapsed / 2);
+      const eased = t * t * (3 - 2 * t);
+      this.cam.x = c.from.x + (c.to.x - c.from.x) * eased;
+      this.cam.y = c.from.y + (c.to.y - c.from.y) * eased;
+      this.scale = c.from.scale + (c.to.scale - c.from.scale) * eased;
+      this.sizeBuffer();
+      this.dirty = true;
+      if (t === 1) {
+        if (c.phase === "in") { c.phase = "hold"; c.elapsed = 0; }
+        else {
+          this.userPan = c.overview.userPan; this.userZoom = c.overview.userZoom;
+          c.phase = "wait"; c.elapsed = -13;
+        }
+      }
+    }
   }
 
   spawnFx(x, y, color) {
@@ -383,6 +457,7 @@ export class World {
     let drag = null;
     c.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
+      this.stopCinema();
       this.cameraTarget = null;
       drag = { x: e.clientX, y: e.clientY, cx: this.cam.x, cy: this.cam.y, moved: false };
       c.setPointerCapture(e.pointerId);
@@ -576,6 +651,7 @@ export class World {
     if (this.paused && !this.dirty) return;
     if (!this.paused) this.t += dt;
     this.update(dt);
+    this.updateCinema(dt);
     this.draw();
     this.dirty = false;
   }

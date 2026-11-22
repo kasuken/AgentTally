@@ -56,6 +56,54 @@ test('cursor-anchored zoom keeps the world point beneath the cursor stationary',
   assert.deepEqual([world.cam.x+(anchor.x-400)/world.scale,world.cam.y+(anchor.y-300)/world.scale],before);
 });
 
+function cinemaFixture(robots = []) {
+  return Object.assign(Object.create(World.prototype), {
+    cam: { x: 10, y: 20 }, scale: 1, cw: 800, ch: 600, paused: false,
+    userPan: false, userZoom: false, cinema: null, cameraTarget: null,
+    robots: new Map(robots.map(r => [r.key, r])), sizeBuffer() {}, onCinemaStop() {},
+  });
+}
+test('cinema visits active agents, follows movement, and returns to the overview', () => {
+  const a = { key: 'a', x: 100, y: 80, session: { status: 'working' } };
+  const b = { key: 'b', x: 200, y: 100, session: { status: 'blocked' } };
+  const world = cinemaFixture([a, b]);
+  world.startCinema(); world.updateCinema(12);
+  assert.equal(world.cinema.key, 'b');
+  world.updateCinema(2);
+  assert.deepEqual(world.cam, { x: 200, y: 90 });
+  b.x = 210; world.updateCinema(1);
+  assert.ok(world.cam.x > 200 && world.cam.x < 210);
+  world.updateCinema(5); world.updateCinema(2);
+  assert.deepEqual(world.cam, { x: 10, y: 20 });
+  assert.equal(world.scale, 1);
+  assert.equal(world.userPan, false); assert.equal(world.userZoom, false);
+  world.updateCinema(25);
+  assert.equal(world.cinema.key, 'a');
+});
+test('cinema returns when its agent disappears and manual zoom stops it without restoring the view', () => {
+  const world = cinemaFixture([{ key: 'a', x: 100, y: 80, session: { status: 'working' } }]);
+  let stopped = 0; world.onCinemaStop = () => stopped++;
+  world.startCinema(); world.updateCinema(12); world.updateCinema(1);
+  world.robots.clear(); world.updateCinema(0.1); world.updateCinema(2);
+  assert.deepEqual(world.cam, { x: 10, y: 20 });
+  world.robots.set('a', { key: 'a', x: 100, y: 80, session: { status: 'working' } });
+  world.updateCinema(25); world.updateCinema(1);
+  const position = { ...world.cam };
+  world.zoom(1);
+  assert.equal(world.cinema, null);
+  assert.equal(stopped, 1);
+  assert.deepEqual(world.cam, position);
+});
+test('cinema waits for an active agent and cannot start while motion is paused', () => {
+  const world = cinemaFixture([{ key: 'idle', x: 0, y: 0, session: { status: 'idle' } }]);
+  world.paused = true; world.startCinema();
+  assert.equal(world.cinema, null);
+  world.paused = false; world.startCinema(); world.updateCinema(12);
+  assert.equal(world.cinema.phase, 'wait');
+  world.setPaused(true);
+  assert.equal(world.cinema, null);
+});
+
 function officeFixture() {
   return Object.assign(Object.create(Office.prototype), {
     projectOrder: [], projects: new Map(), robots: new Map(), fx: [], t: 0,

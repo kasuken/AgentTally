@@ -147,6 +147,7 @@ export class Office extends World {
   }
 
   visit(room) {
+    this.stopCinema();
     const p = this.plan;
     if (!p) return;
     const to = {

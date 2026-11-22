@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.0] - 2026-11-22
+
+### Added
+
+- **Cinema mode** — Let the camera occasionally follow working agents or approval requests, then return to the overview. Manual camera controls stop it, and it respects reduced-motion settings.
+
 ## [0.3.0] - 2026-11-22
 
 ### Added

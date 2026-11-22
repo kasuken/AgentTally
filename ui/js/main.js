@@ -41,7 +41,7 @@ const MAP_ORDER = Object.keys(MAPS);
 const mapParams = new URLSearchParams(location.search);
 let mapMode = mapParams.get("map") ?? (mapParams.has("yard") ? (mapParams.get("yard") === "0" ? "world" : "yard") : load("tally.map", "office"));
 if (!Object.hasOwn(MAPS, mapMode)) mapMode = "office";
-const world = new MAPS[mapMode].View($("world"), { onSelect });
+const world = new MAPS[mapMode].View($("world"), { onSelect, onCinemaStop: updateCinemaButton });
 $("floor-title").textContent = MAPS[mapMode].name;
 $("floor-number").textContent = MAPS[mapMode].code;
 $("world").setAttribute("aria-label", `${MAPS[mapMode].name}. Use the team directory to inspect agents with a keyboard.`);
@@ -309,6 +309,7 @@ $("reset-filters").onclick = resetFilters; $("empty-reset").onclick = resetFilte
 $("recenter").onclick = () => world.recenter();
 $("zoom-in").onclick = () => world.zoom(1); $("zoom-out").onclick = () => world.zoom(-1);
 function applyUi(next) {
+  world.stopCinema();
   ui = UIS.includes(next) ? next : "pixel";
   document.documentElement.dataset.ui = ui;
   $("theme-pixel").disabled = ui !== "pixel";
@@ -333,9 +334,24 @@ function setMotion(paused) {
   $("motion").setAttribute("aria-pressed",paused); $("motion").innerHTML = paused ? '▶ <span>Motion</span>' : 'Ⅱ <span>Motion</span>';
   $("motion").title = paused ? "Resume animation; live data is still updating" : "Pause animation; live data keeps updating";
   $("motion").setAttribute("aria-label", paused ? "Resume animation" : "Pause animation");
+  updateCinemaButton();
 }
 $("motion").onclick = () => { setMotion(!state.paused); save("tally.paused",state.paused); };
-motionPreference.addEventListener("change", (e) => { if (e.matches) setMotion(true); });
+function updateCinemaButton() {
+  const button = $("cinema");
+  const enabled = !!world.cinema;
+  button.setAttribute("aria-pressed", enabled);
+  button.disabled = state.paused || motionPreference.matches;
+  button.title = motionPreference.matches ? "Cinematic camera is unavailable with reduced motion" :
+    state.paused ? "Resume motion to use the cinematic camera" :
+    enabled ? "Stop cinematic camera" : "Start cinematic camera";
+}
+$("cinema").onclick = () => {
+  if (world.cinema) world.stopCinema();
+  else { world.recenter(); world.startCinema(); updateCinemaButton(); }
+};
+motionPreference.addEventListener("change", (e) => { if (e.matches) setMotion(true); else updateCinemaButton(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden) world.stopCinema(); });
 $("detail").addEventListener("click", async (e) => {
   const id = e.target.closest("button")?.id;
   if (id === "close-detail") { const key = state.selected; world.select(null); [...$("roster").querySelectorAll("button")].find((b) => b.dataset.key === key)?.focus({preventScroll:true}); }

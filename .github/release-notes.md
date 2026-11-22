@@ -1,14 +1,10 @@
-# AgentTally v0.3.0
+# AgentTally v0.4.0
 
-## A shared office for your agents
+## A cinematic view of your agents
 
-Pixel view now opens on a 32-bit-style office. Its layout shows what each session is doing: an agent writing code types at its project desk, one running commands visits the server room, and one waiting for permission queues at the review desk. Thinking and replying appear as meetings; they don't imply that agents are talking to one another.
+Turn on **Cinema** in Pixel view to let the camera occasionally follow a working agent or an approval request before returning to the overview. It works across the office, project islands and freight yard.
 
-- **Room close-ups:** Choose Open space to see robots facing their monitors at paired desks, or Meeting to see them seated opposite one another. Lounge and Review desk also have close-ups. Press **F** to see the whole floor again.
-- **Team directory:** Match robot portraits to sessions, see which room an agent is headed to, and select it to inspect its activity.
-- **More maps:** Press **Y** in Pixel view to cycle between the office, project islands, and the new freight yard. **U** still switches between Pixel and Pro.
-
-No migration is required. Saved view preferences are respected, and AgentTally still only reads local logs. Reply to agents and approve requests in their original apps.
+The camera stops when you take manual control. Cinema is unavailable when motion is paused or your system requests reduced motion. No migration is required.
 
 ## Downloads
 

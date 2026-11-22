@@ -2,7 +2,7 @@
   "name": "agent-tally",
   "private": true,
   "type": "module",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A living 32-bit-style pixel office for your local AI coding agents",
   "scripts": {
     "dev": "tauri dev",

@@ -78,6 +78,10 @@ Use **Room views** to get closer to the desks, meeting, lounge or review queue. 
 bubbles. The original islands and freight yard are still available with <kbd>Y</kbd>;
 your map choice is remembered.
 
+Turn on **Cinema** for occasional camera visits to working agents and approval requests.
+It returns to the overview between visits and stops when you take control of the camera.
+Cinema is unavailable when motion is paused or your system requests reduced motion.
+
 <img src="docs/screenshots/office-meeting.png" alt="Room close-up: robots at a meeting table in the Pixel office" width="720" />
 
 Each robot also has a colour and head for its agent: orange with a star antenna for Claude,
