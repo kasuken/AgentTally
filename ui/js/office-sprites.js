@@ -1,12 +1,13 @@
-// Pixel interiors for the Agent Office prototype: light tiled floors, thick white walls,
+// Pixel interiors for Agent Office: carpet tiles, cutaway walls,
 // wooden doors and softly outlined furniture. Original art drawn with rectangles.
 // Positions are ground points (where things touch the floor) so the renderer can depth-sort
 // furniture together with the robots.
 
 import { px } from "./sprites.js";
+import { crewSprite } from "./crew-art.js";
 import { line, pixelText, textWidth } from "./yard-sprites.js";
 
-export const LINE = "#3b3d4c";
+export const LINE = "#39354b";
 export const OUT = LINE;
 export { pixelText, textWidth };
 
@@ -16,17 +17,36 @@ export function obox(g, x, y, w, h, fill, outline = LINE) {
   px(g, x + 1, y + 1, w - 2, h - 2, fill);
 }
 
-const WOOD = "#d9b27e", WOOD_HI = "#ecca98", WOOD_LO = "#b98e5c";
-const CHAIR = "#4a4e5e", CHAIR_HI = "#666b7e";
+const WOOD = "#daa57c", WOOD_HI = "#f5d4a0", WOOD_LO = "#ac756b";
+const CHAIR = "#4d526c", CHAIR_HI = "#82889c";
 const METAL = "#a3a9b6", METAL_HI = "#c7ccd6";
+
+// Half-unit details use the office's finer backing grid at close range.
+function detail(g, x, y, w, h, color) {
+  g.fillStyle = color; g.fillRect(x, y, w, h);
+}
+
+function editorScreen(g, x, y, w, h, t, seed) {
+  detail(g,x,y,w,h,"#1e3943");
+  detail(g,x,y,w,1,"#58777b");
+  detail(g,x+1,y+1,1,h-1,"#304f59");
+  for (let row=0;row<4;row++) {
+    const xx = x + 2.5 + row%2;
+    const n = 1.5 + (seed+row*3)%2;
+    detail(g,xx,y+2+row*1.5,n,.5,["#ffcf91","#a8e7d1","#aacaeb","#eeb1bc"][row]);
+    detail(g,xx+n+.5,y+2+row*1.5,Math.max(.5,w-(xx-x)-n-1.5),.5,"#829eaa");
+  }
+  if (Math.floor(t*2) % 2 === 0) detail(g,x+w-1.5,y+h-2,.5,1.5,"#eff9da");
+}
 
 // ---------------------------------------------------------------- floors and walls
 
 export const FLOORS = {
+  studio:  { a: "#b7b9ba", b: "#b3b4b7", line: "#adafb2", hi: "#bfc1c0", size: 16, woven: true },
   tile:    { a: "#c9ccd3", b: "#c3c6ce", line: "#b6bac3", hi: "#d4d7dd", size: 16 },
   lobby:   { a: "#d3d5db", b: "#cdd0d6", line: "#bec2ca", hi: "#dfe1e6", size: 24 },
-  wood:    { a: "#c99a63", b: "#c29360", line: "#a97f50", hi: "#d6a96f", size: 8, planks: true },
-  kitchen: { a: "#e2dccf", b: "#d9d2c2", line: "#c9c0ad", hi: "#ebe6db", size: 12 },
+  wood:    { a: "#bf9790", b: "#c89d8c", line: "#b28782", hi: "#d0aa98", size: 9, planks: true },
+  kitchen: { a: "#d6d9c8", b: "#adc2af", line: "#a4b2a7", hi: "#d7dfce", size: 10 },
   bath:    { a: "#e9ecf2", b: "#e2e6ee", line: "#d0d5df", hi: "#f3f5f8", size: 8 },
   server:  { a: "#8a91a1", b: "#848b9b", line: "#737a8a", hi: "#98a0b0", size: 12 },
   dark:    { a: "#7d8292", b: "#777c8c", line: "#6a6f80", hi: "#8a90a0", size: 16 },
@@ -38,9 +58,26 @@ export function drawFloor(g, x, y, w, h, kind) {
   if (f.planks) {
     for (let yy = 0; yy < h; yy += f.size) {
       px(g, x, y + yy, w, 1, f.line);
-      const off = (yy / f.size) % 2 ? 0 : 19;
-      for (let xx = off; xx < w; xx += 38) px(g, x + xx, y + yy, 1, f.size, f.line);
-      px(g, x, y + yy + 1, w, 1, f.hi);
+      const row = yy / f.size, th = Math.min(f.size,h-yy);
+      const off = (row * 19) % 49;
+      for (let xx = off - 49; xx < w; xx += 49) {
+        const start = Math.max(xx,0), end = Math.min(xx+49,w);
+        if (end <= start || th < 2) continue;
+        if ((row + Math.floor((xx-off)/49)) % 3 === 0) px(g,x+start,y+yy+1,end-start,th-1,f.b);
+        if (xx >= 0) px(g,x+xx,y+yy,1,th,f.line);
+        if (xx + 5 >= 0 && xx + 15 < w && th > 4) px(g,x+xx+5,y+yy+4,7+row%4,1,f.hi);
+      }
+    }
+    return;
+  }
+  if (f.woven) {
+    for (let yy=0;yy<h;yy+=f.size) for (let xx=0;xx<w;xx+=f.size) {
+      const tw=Math.min(f.size,w-xx), th=Math.min(f.size,h-yy);
+      const cross = ((xx+yy)/f.size)%2 === 1;
+      px(g,x+xx,y+yy,tw,th,cross ? f.b : f.a);
+      for (let k=3;k<(cross ? th : tw);k+=4) {
+        px(g,x+xx+(cross ? 0 : k),y+yy+(cross ? k : 0),cross ? tw : 1,cross ? 1 : th,"rgba(74,70,86,.035)");
+      }
     }
     return;
   }
@@ -56,8 +93,16 @@ export function drawFloor(g, x, y, w, h, kind) {
 }
 
 export function drawRug(g, x, y, w, h, color, border) {
+  px(g, x + 1, y + 2, w, h, "rgba(63,54,64,.18)");
   px(g, x, y, w, h, border);
   px(g, x + 2, y + 2, w - 4, h - 4, color);
+  for (const edge of [x+3,x+w-4]) {
+    px(g,edge,y+3,1,h-6,"rgba(255,247,219,.36)");
+    for (let i=7;i<h-6;i+=6) px(g,edge+(edge===x+3?1:-1),y+i,1,2,border);
+  }
+  for (let i = 5; i < w - 5; i += 5) {
+    px(g, x + i, y + 3, 2, 1, border); px(g, x + i, y + h - 4, 2, 1, border);
+  }
   for (let xx = x + 4; xx < x + w - 4; xx += 4) { px(g, xx, y - 1, 1, 1, border); px(g, xx, y + h, 1, 1, border); }
 }
 
@@ -75,10 +120,12 @@ export function wallCapV(g, x, y, h) {
 }
 /** The visible front of a wall: warm white with a darker band and a baseboard. */
 export function wallFace(g, x, y, w, h) {
-  px(g, x, y, w, h, "#e9e6e0");
-  px(g, x, y, w, 1, "#d8d4cc");
-  px(g, x, y + h - 3, w, 2, "#c9c4ba");
-  px(g, x, y + h - 1, w, 1, "#9e988c");
+  px(g, x, y, w, h, "#e3d9d7");
+  px(g, x, y, w, 2, "#b9afb9");
+  px(g, x, y + h - 6, w, 1, "#cec0c7");
+  px(g, x, y + h - 3, w, 2, "#9f909e");
+  px(g, x, y + h - 1, w, 1, "#797187");
+  px(g, x, y + h, w, 2, "rgba(75,55,76,.19)");
 }
 /** An open wooden door set into a wall face. `y` is the top of the face, `h` its height. */
 export function doorway(g, cx, y, h) {
@@ -91,8 +138,9 @@ export function doorway(g, cx, y, h) {
 }
 export function signPlate(g, text, x, y) {
   const w = textWidth(text) + 4;
-  obox(g, x, y, w, 8, "#4a5068");
-  pixelText(g, text, x + 2, y + 2, "#f6f6f8");
+  obox(g, x - 1, y - 1, w + 2, 10, "#444157");
+  px(g,x,y,w,1,"#777588");
+  pixelText(g, text, x + 2, y + 2, "#fff1cf");
 }
 
 /** Sky colour through the windows, from the local hour. */
@@ -103,13 +151,32 @@ export function skyAt(hour) {
 }
 export function drawWindow(g, x, y, w, h, t, hour) {
   const s = skyAt(hour);
-  obox(g, x, y, w, h, "#f6f6f8");
+  obox(g, x, y, w, h, "#a6b7c5");
   px(g, x + 2, y + 2, w - 4, h - 4, s.sky);
+  px(g, x + 2, y + Math.floor(h/2), w - 4, Math.ceil(h/2)-2, s.night ? "#344767" : s.hi);
   px(g, x + 2, y + 2, w - 4, 1, s.hi);
-  if (s.night) { if (Math.floor(t + x) % 3) px(g, x + 4 + (x % (w - 8)), y + 4, 1, 1, "#ffffff"); }
-  else { const cx = x + 3 + Math.floor((t * 1.5 + x) % (w - 9)); px(g, cx, y + 4, 4, 1, "#ffffff"); }
+  for (let i = 2; i < w - 5; i += 6) {
+    const bh = 3 + ((i * 7) % 8), top = y + h - 2 - bh;
+    px(g,x+i,top,4,bh,s.night ? "#34435b" : "#8ba6b1");
+    px(g,x+i+3,top+1,2,bh-1,s.night ? "#28384c" : "#718d9b");
+    for (let floor=1;floor<bh-1;floor+=2) {
+      detail(g,x+i+.5,top+floor,.5,1,s.night ? "#ecc782" : "#c7d7d7");
+      detail(g,x+i+2,top+floor,1,.5,s.night ? "#b6b0a4" : "#c7d7d7");
+    }
+  }
+  px(g,x + 4,y + 4,5,1,s.hi); px(g,x+6,y+3,2,1,s.hi);
+  for (let i = 0; i < 4; i++) px(g,x+w-8-i,y+2+i,2,1,"rgba(255,255,255,.4)");
   px(g, x + Math.floor(w / 2), y + 1, 1, h - 2, "#f6f6f8");
-  px(g, x + 1, y + h - 2, w - 2, 1, "#c9c4ba");
+  px(g, x - 1, y + h - 1, w + 2, 2, "#f2e4cd");
+  px(g, x, y + h + 1, w, 1, "#998497");
+}
+export function drawSunlight(g, x, y, w, night) {
+  const light = `rgba(255,235,172,${.28 * (1 - night)})`;
+  for (let i = 0; i < 22; i++) {
+    const dx = Math.floor(i / 2);
+    for (let pane = 0; pane < 2; pane++)
+      px(g, x + dx + pane * Math.floor(w/2), y + i, Math.floor(w/2)-2, 1, light);
+  }
 }
 export function drawClock(g, x, y) {
   const now = new Date();
@@ -129,85 +196,196 @@ export function drawPoster(g, x, y, kind) {
   px(g, x + 2, y + 8, 6, 1, "#c9ccd3"); px(g, x + 2, y + 10, 4, 1, "#c9ccd3");
 }
 export function drawBoard(g, x, y, w, h, t, busy) {
-  // A whiteboard on a wall face, scribbled on during meetings.
-  obox(g, x, y, w, h, "#ffffff");
-  px(g, x + 1, y + h - 2, w - 2, 1, "#c9ccd3");
-  const n = busy ? 3 + (Math.floor(t * 1.5) % 3) : 2;
-  for (let i = 0; i < n; i++) px(g, x + 3, y + 2 + i * 2, 4 + ((i * 7 + 3) % (w - 10)), 1, ["#5a8ee0", "#e0604a", "#3fa060"][i % 3]);
-  if (busy) { for (let i = 0; i < 4; i++) px(g, x + w - 12 + i * 2, y + h - 4 - ((i * 3) % 5), 1, 1 + ((i * 3) % 5), "#5a8ee0"); }
+  px(g,x+1,y+1,w,h,"#b1a5a8"); obox(g,x,y,w,h,"#e8eee3");
+  px(g,x+1,y+1,w-2,1,"#fff9e7");
+  for (let i=0;i<3;i++) {
+    px(g,x+4,y+3+i*3,2,2,i===2 ? "#d6ad73" : "#82ad9b");
+    detail(g,x+8,y+3.5+i*3,10-i*2,1,"#7c9494");
+  }
+  // A sketched decision tree and a magnetic marker tray.
+  px(g,x+w-24,y+5,13,1,"#839da0"); px(g,x+w-12,y+4,1,6,"#839da0");
+  obox(g,x+w-29,y+3,7,5,"#a9cdc4","#638b86");
+  obox(g,x+w-10,y+2,6,4,"#d6c3de","#9383a2");
+  obox(g,x+w-10,y+8,6,4,"#efd2a7","#b59874");
+  if (busy) detail(g,x+w-20+Math.floor(t)%3,y+4,1.5,1.5,"#a65e63");
+  px(g,x+2,y+h-2,w-4,1,"#a2b2b0"); px(g,x+7,y+h-2,5,1,"#9f5f72");
 }
 
 // ---------------------------------------------------------------- cubicles
 
-/** Office chair seen from the front: the robot sits on it, so it is drawn before the robot. */
-export function drawChair(g, x, y) {
-  obox(g, x - 5, y - 13, 11, 9, CHAIR);
-  px(g, x - 4, y - 12, 9, 2, CHAIR_HI);
-  obox(g, x - 6, y - 5, 13, 4, CHAIR);
-  px(g, x - 1, y - 1, 3, 2, "#2e3140");
-  px(g, x - 4, y + 1, 9, 1, "#2e3140");
+export function drawChair(g, x, y, facing) {
+  px(g,x-5,y+2,13,2,"rgba(56,51,66,.22)");
+  px(g,x-1,y-2,3,5,CHAIR);
+  px(g,x-6,y+1,13,1,CHAIR_HI);
+  for (const foot of [-5,1,5]) px(g,x+foot,y+2,2,2,LINE);
+  obox(g,x-6,y-6,13,6,CHAIR_HI);
+  px(g,x-5,y-5,11,2,"#9096a8"); px(g,x-5,y-2,11,1,"#697289");
+  px(g,x-6,y-6,2,2,CHAIR); px(g,x+5,y-6,2,2,CHAIR);
+  if (facing !== "north") drawChairBack(g,x,y,facing);
 }
 
-/** Low cubicle partition behind a row of seats, its fabric in the team colour. */
-export function drawPartition(g, x, y, w, color) {
-  obox(g, x, y - 12, w, 12, METAL);
-  px(g, x + 2, y - 10, w - 4, 7, color);
-  px(g, x + 2, y - 10, w - 4, 1, "rgba(255,255,255,0.3)");
-  px(g, x + 1, y - 11, w - 2, 1, METAL_HI);
-  for (let k = 36; k < w - 4; k += 34) px(g, x + k, y - 11, 1, 10, METAL);
+export function drawChairBack(g,x,y,facing) {
+  const side = facing === "east" || facing === "west";
+  const w = side ? 4 : 12, bx = x + (facing === "east" ? -8 : facing === "west" ? 4 : -6);
+  const by = y - (facing === "north" ? 7 : 13);
+  px(g,bx+1,by,w-2,10,LINE); px(g,bx,by+1,w,8,LINE);
+  px(g,bx+1,by+1,w-2,7,CHAIR); px(g,bx+1,by+1,w-2,1,CHAIR_HI);
+  for (let j=0;j<3;j++) detail(g,bx+1,by+3+j*1.5,w-2,.5,"#6f778c");
+  detail(g,bx+1,by+.5,w-2,.5,"#a4aaba");
+  if (!side) {
+    detail(g,bx+2,by+2,.5,5,"#888fa1"); detail(g,bx+w-3,by+2,.5,5,"#303448");
+    detail(g,bx+3,by+7,w-6,1,"#687080");
+  }
 }
 
-/** A desk in front of the seat at (x, y). mode: off | code | done | sleep */
-export function drawDesk(g, x, y, t, mode, seed) {
-  // Monitor beside the seat, angled towards us.
-  obox(g, x - 18, y - 16, 12, 10, "#2e3140");
-  const sx = x - 17, sy = y - 15;
-  if (mode === "code") {
-    px(g, sx, sy, 10, 8, "#1d3a5c");
-    for (let r = 0; r < 3; r++) {
-      const w = 2 + ((Math.floor(t * 5) + r * 3 + seed) % 6);
-      px(g, sx + 1 + (r % 2), sy + 1 + r * 2, w, 1, r === 1 ? "#ffd08a" : "#8fe0a8");
+function blotter(g,x,y,w,h) {
+  obox(g,x,y,w,h,"#aebab8","#7f8f90");
+  detail(g,x+1,y+1,w-2,.5,"#c8d3c8");
+}
+
+function papers(g,x,y) {
+  px(g,x+1,y+1,7,5,"#8b8484"); px(g,x+1,y,7,5,"#d1d0c6");
+  px(g,x,y-1,7,5,"#faf4dc"); detail(g,x+1,y,4,1,"#8eacb6");
+  detail(g,x+1,y+2,4,.5,"#b5aba1");
+}
+
+function cup(g,x,y) {
+  px(g,x,y,5,4,"#a28e80"); px(g,x+1,y-1,4,4,"#f8eccc");
+  detail(g,x+1.5,y-.5,3,1,"#86634f"); detail(g,x+5,y,1.5,2,"#efdbb6");
+}
+
+function keyboard(g,x,y,side) {
+  const w = side ? 4 : 10, h = side ? 8 : 4;
+  px(g,x,y,w,h,"#59616f"); detail(g,x+.5,y+.5,w-1,h-1,"#c2cad0");
+  for (let i=1;i<w-1;i+=1.5) for (let j=1;j<h-1;j+=1.5)
+    detail(g,x+i,y+j,1,1,"#83909a");
+}
+
+const deskFrames = new Map();
+// Origins are desktop centres. Cache the static pixel layers together with the two cursor frames.
+export function drawDesk(g,x,y,facing,t,mode,seed) {
+  const frame = mode === "code" ? Math.floor(t*2)%2 : 0;
+  const style = seed % 3, key = `${facing}:${mode}:${style}:${frame}`;
+  let c = deskFrames.get(key);
+  if (!c) {
+    c = document.createElement("canvas"); c.width = 76; c.height = 68;
+    const ctx = c.getContext("2d");
+    ctx.setTransform(facing === "west" ? -2 : 2,0,0,2,38,40);
+    paintDesk(ctx,facing,frame,mode,style);
+    deskFrames.set(key,c);
+  }
+  g.drawImage(c,x-19,y-20,38,34);
+}
+
+function paintDesk(g,facing,frame,mode,style) {
+  const side = facing === "west" || facing === "east";
+  const half = side ? 11 : 16;
+  px(g,-half+2,5,half*2,6,"rgba(62,54,68,.20)");
+  for (const lx of [-half+1,half-4]) {
+    obox(g,lx,1,4,10,"#9da4a9"); px(g,lx+1,9,2,2,"#555361");
+  }
+  obox(g,-half+2,2,8,7,"#a6a8b2"); px(g,-half+3,4,6,1,"#d2cfd0");
+  px(g,-half+5,5,3,1,CHAIR);
+  obox(g,-half,-8,half*2,15,"#c79e77");
+  px(g,-half+1,-7,half*2-2,11,"#dec099");
+  px(g,-half+1,-7,half*2-2,1,"#f5d9ab"); px(g,-half+1,4,half*2-2,1,"#f1cd9f");
+  for (let k=-half+2;k<half-3;k+=5) detail(g,k,-5+(k+half)%6,2,.5,"#c8a882");
+
+  const mx = side ? 2 : -8, my = facing === "south" ? -9 : -15;
+  blotter(g,-half+1,-5,side ? 12 : 21,9);
+  detail(g,mx+6,my+11,4,.5,"#7f7c78");
+  detail(g,mx+9.5,my+9,.5,2.5,"#7f7c78");
+  px(g,mx+2,my+11,7,1,"#61717a"); px(g,mx+4,my+8,3,3,"#77858e");
+  if (side) {
+    for (let i=0;i<8;i++) {
+      const dy = Math.floor(i/3);
+      px(g,mx+i,my+dy,1,10,LINE);
+      px(g,mx+i,my+dy+1,1,1,"#afbac5");
+      if (i>0 && i<7) px(g,mx+i,my+dy+2,1,6,mode === "off" ? "#485a6a" : "#49779a");
+    if (mode === "code" && i>1 && i<6) {
+      detail(g,mx+i,my+dy+3,1,.5,"#d6e6de");
+      if (i<5) detail(g,mx+i,my+dy+5,1,1,"#e4ba8c");
+      if (frame && i===3) detail(g,mx+i,my+dy+7,1,.5,"#94d4dd");
     }
-  } else if (mode === "done") {
-    px(g, sx, sy, 10, 8, "#3a6aa8");
-    px(g, sx + 2, sy + 4, 1, 1, "#ffffff"); px(g, sx + 3, sy + 5, 1, 1, "#ffffff");
-    px(g, sx + 4, sy + 4, 1, 1, "#ffffff"); px(g, sx + 5, sy + 3, 1, 1, "#ffffff"); px(g, sx + 6, sy + 2, 1, 1, "#ffffff");
-  } else if (mode === "sleep") {
-    px(g, sx, sy, 10, 8, "#5aa8e8");
-    px(g, sx, sy, 10, 2, "#7cc0f2");
-    const k = Math.floor(t * 0.7 + seed) % 6;
-    px(g, sx + 1 + k, sy + 3 + (k % 3), 2, 2, "#d8eefc");
-  } else px(g, sx, sy, 10, 8, "#3b4256");
-  px(g, x - 13, y - 6, 3, 2, "#2e3140");
-  // Desk top and front.
-  obox(g, x - 20, y - 5, 34, 7, WOOD);
-  px(g, x - 19, y - 4, 32, 1, WOOD_HI);
-  obox(g, x - 20, y + 1, 34, 5, WOOD_LO);
-  px(g, x - 19, y + 6, 2, 3, METAL); px(g, x + 11, y + 6, 2, 3, METAL);
-  // Keyboard, papers, and a mug or a plant on some desks.
-  px(g, x - 4, y - 4, 9, 2, "#e8eaef"); px(g, x - 4, y - 3, 9, 1, "#c9ccd3");
-  if (seed % 3 === 0) { obox(g, x + 7, y - 8, 4, 4, "#ffffff"); px(g, x + 8, y - 7, 2, 1, "#c88a5a"); }
-  else if (seed % 3 === 1) { obox(g, x + 6, y - 6, 5, 4, "#c96b3c"); px(g, x + 6, y - 10, 5, 4, "#5aa84f"); px(g, x + 7, y - 11, 2, 2, "#7cc576"); }
-  else { px(g, x + 6, y - 4, 6, 3, "#ffffff"); px(g, x + 7, y - 3, 4, 1, "#c9ccd3"); }
+    }
+  keyboard(g,-9,-5,true);
+  } else if (facing === "south") {
+    keyboard(g,-2,-6,false);
+    obox(g,mx,my,14,10,"#7b8493"); px(g,mx+1,my+1,12,2,"#a4aeb6");
+    for (let i=0;i<4;i++) detail(g,mx+2+i*2,my+4,1,2,"#565967");
+    px(g,mx+8,my+7,3,1,"#c6c9bf");
+    detail(g,mx+2,my+8,5,.5,"#a7aeb5");
+  } else {
+    obox(g,mx,my,15,10,"#a3adb8");
+    if (mode === "code") editorScreen(g,mx+1,my+1,13,8,frame/2,style);
+    else {
+      px(g,mx+1,my+1,13,8,mode === "off" ? "#485a6b" : "#527e9f");
+      px(g,mx+2,my+2,9,1,"#7397ac");
+      if (mode === "done") pixelText(g,"V",mx+6,my+3,"#e7f1ca");
+    }
+    keyboard(g,-6,0,false);
+  }
+  const ax = side ? -2 : 8;
+  if (style === 0) cup(g,ax,0);
+  if (style === 1) papers(g,ax,-1);
+  if (style === 2) {
+    px(g,ax,-2,6,5,"#a07058"); px(g,ax+1,-1,2,3,"#c39275");
+    for (const [dx,dy,dir] of [[2,-5,-1],[3,-8,1],[3,-4,1]]) {
+      px(g,ax+dx,dy,2,-2-dy,"#48725c"); px(g,ax+dx+dir,dy-1,2,2,"#64936b");
+      detail(g,ax+dx+2*dir,dy-2,1.5,1.5,"#8caf7f");
+    }
+    px(g,ax-1,-3,8,2,"#d5a385");
+  }
 }
 
 // ---------------------------------------------------------------- rooms
 
-export function drawMeetingTable(g, cx, y, w, t, busy) {
+const END_INSETS = [7,4,2,1];
+export function drawMeetingTable(g, cx, y, w, busy) {
   const x = Math.round(cx - w / 2);
-  obox(g, x, y - 16, w, 13, WOOD);
-  px(g, x + 1, y - 15, w - 2, 1, WOOD_HI);
-  obox(g, x, y - 4, w, 4, WOOD_LO);
-  for (let i = 0; i < 4; i++) px(g, x + 8 + i * Math.floor((w - 16) / 4), y - 12 + (i % 2) * 3, 6, 4, "#ffffff");
-  obox(g, Math.round(cx) - 5, y - 11, 10, 5, "#2e3140");
-  if (busy && Math.floor(t * 3) % 2) px(g, Math.round(cx) - 1, y - 10, 3, 1, "#46e07a");
-  px(g, x + 3, y, 2, 2, METAL); px(g, x + w - 5, y, 2, 2, METAL);
+  const top = y-22;
+  px(g,x+4,y-7,w-4,8,"rgba(60,52,66,.18)");
+  for (const leg of [x+8,x+w-13]) {
+    obox(g,leg,y-6,5,8,"#9295a0"); px(g,leg-2,y+1,9,2,CHAIR);
+  }
+  // Stepped ends keep the oval silhouette sharp even at maximum magnification.
+  for (let j=0;j<18;j++) {
+    const inset = END_INSETS[Math.min(j,17-j)] ?? 0;
+    px(g,x+inset,top+j,w-2*inset,5,LINE);
+    px(g,x+inset+1,top+j,w-2*inset-2,4,"#a77f69");
+  }
+  for (let j=0;j<18;j++) {
+    const inset = END_INSETS[Math.min(j,17-j)] ?? 0;
+    px(g,x+inset+1,top+j,w-2*inset-2,1,
+      j===0 || j===16 ? "#f3d9b0" : j===17 ? "#a7816a" : "#dcc39f");
+  }
+  const mid = Math.round(cx);
+  detail(g,mid,top+1,.5,15,"#c29f82");
+  for (let i=0;i<3;i++) {
+    const gx = x+5+i*Math.floor(w/3), gy = top+5+i*4;
+    detail(g,gx,gy,7,.5,"#caae8e"); detail(g,gx+7,gy-.5,4,.5,"#caae8e");
+  }
+  if (w>52) {
+    // The laptop opens toward the far seat; the near seat gets the lit screen.
+    const left = Math.round(cx-w*.25), right = Math.round(cx+w*.25);
+    obox(g,left-6,top+2,12,7,"#929ba4"); detail(g,left-1,top+4,3,1.5,"#c6cfd0");
+    px(g,left-7,top+9,14,2,"#697886"); papers(g,left+3,top+12);
+    cup(g,right+7,top+3); blotter(g,right-9,top+10,14,6);
+    obox(g,right-8,top+6,11,7,"#416581");
+    detail(g,right-6,top+8,5,.5,"#c0dde1"); detail(g,right-6,top+10,3,1,"#85bdca");
+    px(g,right-9,top+13,13,2,"#a1abb0");
+  } else {
+    papers(g,x+6,top+6); cup(g,x+w-10,top+8);
+  }
+  px(g,mid-4,top+7,9,5,"#7a726f"); obox(g,mid-5,top+6,10,5,CHAIR);
+  for (let i=0;i<3;i++) detail(g,mid-3+i*2,top+7,1,1.5,"#929da3");
+  px(g,mid,top+9,2,1,busy ? "#9be0b4" : "#728c93");
 }
 
 export function drawShelf(g, x, y, w, seed) {
   obox(g, x, y - 30, w, 30, "#b98e5c");
   px(g, x + 1, y - 29, w - 2, 1, "#d6a96f");
-  const colors = ["#c8462e", "#5a8ee0", "#f2c14e", "#3fa060", "#9b6df2", "#ffffff", "#f2b27a"];
+  const colors = ["#bb6d65", "#698da6", "#dab67f", "#6f9885", "#9584a7", "#e9d5b4", "#cc9278"];
   for (let row = 0; row < 3; row++) {
     px(g, x + 2, y - 20 + row * 9, w - 4, 1, "#8a6440");
     let bx = x + 2;
@@ -215,6 +393,7 @@ export function drawShelf(g, x, y, w, seed) {
       const bw = 2 + ((bx * 7 + row * 3 + seed) % 2);
       const bh = 5 + ((bx + row + seed) % 3);
       px(g, bx, y - 20 + row * 9 - bh, bw, bh, colors[(bx * 3 + row + seed) % colors.length]);
+      px(g,bx,y-19+row*9-bh,bw,1,"rgba(255,248,225,.56)");
       bx += bw + ((bx + seed) % 6 === 0 ? 3 : 0);
     }
   }
@@ -249,8 +428,10 @@ export function drawSideTable(g, x, y) {
 
 export function drawRack(g, x, y, t, busy, seed) {
   obox(g, x, y - 34, 18, 34, "#3b3f4e");
+  px(g,x+1,y-33,1,31,"#747f91"); px(g,x+16,y-33,1,31,"#242e3d");
   for (let u = 0; u < 7; u++) {
     px(g, x + 2, y - 31 + u * 4, 14, 3, "#4f5466");
+    for (let v=0;v<4;v++) detail(g,x+3+v*1.5,y-30+u*4,.5,1.5,"#283643");
     for (let l = 0; l < 3; l++) {
       const on = busy ? (Math.floor(t * 8) + u * 3 + l * 5 + seed) % 4 !== 0 : (u + l + seed) % 3 === 0;
       px(g, x + 10 + l * 2, y - 30 + u * 4, 1, 1, on ? (l === 2 ? "#ffb347" : "#46e07a") : "#2e3140");
@@ -368,11 +549,18 @@ export function drawVending(g, x, y, t) {
   px(g, x - 6, y - 6, 10, 3, "#2e3140");
 }
 export function drawCouch(g, x, y, w, color = "#8e9ab0") {
+  px(g,x-1,y,w+5,3,"rgba(63,54,64,.22)");
   obox(g, x, y - 16, w, 9, color);
   px(g, x + 1, y - 15, w - 2, 1, "rgba(255,255,255,0.3)");
   obox(g, x, y - 8, w, 8, color);
   for (let k = Math.floor(w / 3); k < w - 2; k += Math.floor(w / 3)) px(g, x + k, y - 7, 1, 6, "rgba(0,0,0,0.15)");
   obox(g, x - 3, y - 12, 5, 12, color); obox(g, x + w - 2, y - 12, 5, 12, color);
+  px(g,x+2,y-3,w-4,2,"rgba(32,45,51,.24)");
+  const throwX = x + Math.floor(w*.61);
+  px(g,throwX,y-15,8,9,"#cf9c6e"); px(g,throwX,y-7,8,2,"#e5bd8c");
+  for (let i=1;i<8;i+=2) {
+    detail(g,throwX+i,y-14,.5,8,"#eac99e"); detail(g,throwX+i,y-5,1,1.5,"#efcf9b");
+  }
 }
 export function drawPingPong(g, x, y, w, t, rally) {
   const h = 22, x0 = Math.round(x - w / 2);
@@ -386,14 +574,19 @@ export function drawPingPong(g, x, y, w, t, rally) {
   px(g, x0 - 4 + p * (w + 8), y - h / 2 - Math.abs(Math.sin(t * 6.4)) * 8, 2, 2, "#ffffff");
 }
 export function drawPlant(g, x, y, big) {
-  obox(g, x - 4, y - 7, 9, 7, "#c96b3c");
-  px(g, x - 3, y - 6, 7, 1, "#e08a5c");
-  const h = big ? 16 : 10;
-  px(g, x - 6, y - 6 - h, 13, h, LINE);
-  px(g, x - 5, y - 5 - h, 11, h - 1, "#4f9a48");
-  px(g, x - 3, y - 4 - h, 5, h - 5, "#72c060");
-  px(g, x - 8, y - 9 - Math.floor(h / 2), 3, 4, "#4f9a48"); px(g, x + 6, y - 11 - Math.floor(h / 2), 3, 4, "#4f9a48");
-  px(g, x - 1, y - 8 - h, 3, 3, "#72c060");
+  px(g,x-4,y-1,11,2,"rgba(57,44,63,.19)");
+  obox(g,x-4,y-8,9,8,"#bc8074"); obox(g,x-5,y-9,11,3,"#edbb97");
+  px(g,x-2,y-6,2,4,"#d49c81");
+  const h = big ? 15 : 9;
+  px(g,x,y-9-h,2,h,"#686b50");
+  for (const [dx,dy,len,dir] of [[0,1,6,-1],[0,3,5,1],[-1,6,8,-1],[1,8,7,1],[0,11,6,-1]]) {
+    const sy=y-10-h+dy*.7;
+    for (let j=0;j<len;j++) {
+      const ly=sy-Math.min(j,3)+Math.max(0,j-5);
+      px(g,x+dx+j*dir,ly,2,j===len-1?2:4,"#416955");
+      if (j<len-1) px(g,x+dx+j*dir,ly,2,1,j<3?"#74a373":"#98bc7f");
+    }
+  }
 }
 export function drawToilet(g, x, y) {
   obox(g, x - 5, y - 16, 10, 6, "#ffffff");
@@ -436,4 +629,24 @@ export function drawRoomba(g, x, y, t) {
   px(g, x - 5, y - 3, 11, 4, LINE); px(g, x - 4, y - 4, 9, 1, LINE);
   px(g, x - 4, y - 3, 9, 3, "#e8eaef"); px(g, x - 2, y - 3, 5, 1, "#ffffff");
   px(g, x, y - 4, 1, 1, Math.floor(t * 3) % 2 ? "#46e07a" : "#2a5a3a");
+}
+
+// The guide uses the same props as the corresponding room in the cutaway.
+export function drawRoomIcon(g, room) {
+  g.imageSmoothingEnabled = false;
+  const person = (provider,x,y,facing) => g.drawImage(crewSprite({provider,legs:"sit",facing}),x,y,16,18);
+  switch (room) {
+    case "meeting":
+      person("copilot",8,3,"south"); drawMeetingTable(g,22,36,40,true);
+      person("codex",21,24,"north"); return;
+    case "desk":
+      drawChair(g,10,29,"east"); person("claude",2,11,"east");
+      return drawDesk(g,27,29,"east",0,"code",0);
+    case "library": return drawShelf(g,9,39,26,2);
+    case "terminal": return drawRack(g,13,40,0,true,2);
+    case "radar": return drawBooth(g,6,13,32,23,0,false);
+    case "tasks": return drawWhiteboard(g,4,44,36,0,false);
+    case "queue": g.save(); g.scale(.8,.8); drawBossDesk(g,27,44,0,true); g.restore(); break;
+    case "break": drawPlant(g,33,27,false); return drawCouch(g,5,37,29,"#849e9e");
+  }
 }

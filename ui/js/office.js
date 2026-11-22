@@ -1,18 +1,18 @@
-// Agent Office (prototype): one big open-plan office. Every project is a team pod of desks,
+// One shared office. Every project is a team pod of desks,
 // every session is a robot employee. Thinking agents meet in the meeting room, readers go to the
 // library, runners to the server room, web/MCP calls happen in the phone booths, planning at the
 // kanban board. Approvals queue at the manager's door (you), idle agents take a break.
 // Camera, pan/zoom, selection and the frame loop are inherited from World.
 
 import { World } from "./world.js";
-import { px, robotSprite, droneSprite, drawBubble, drawToolFx } from "./sprites.js";
-import { providerMeta, STATUS } from "./meta.js";
+import { px, drawBubble, drawToolFx } from "./sprites.js";
+import { crewSprite } from "./crew-art.js";
+import { providerMeta, stationFor, STATUS } from "./meta.js";
 import * as F from "./office-sprites.js";
 
 const { OUT, obox, pixelText } = F;
-const LEFTW = 104, AISLE = 24, POD_W = 112, POD_H = 66, ROWGAP = 24, TOPH = 100, BOTH = 112, MIN_FW = 700;
-const SEAT_X = [22, 56, 90], SEAT_Y = [26, 58];
-const TEAM_SOFT = ["#a596d0", "#86bfc9", "#d6aa86", "#93c493", "#d4c47a", "#c495b8", "#93a8dc", "#d69494"];
+const LEFTW = 70, AISLE = 18, POD_W = 84, ROWGAP = 16, TOPH = 100, BOTH = 96, MIN_FW = 508;
+const SEATS_PER_ROW = 2, SEAT_Y = 28, DESK_PITCH = 42, BOOTHS = 2;
 const TEAM = ["#6a4f93", "#2f6f7f", "#8a553e", "#3f6f42", "#7a6a2e", "#6a3f5c", "#33508a", "#7f4040"];
 const SPEED = 34, DRONE_SPEED = 60;
 const ROOM_STATIONS = new Set(["library", "terminal", "radar", "tasks"]);
@@ -27,28 +27,80 @@ const PASTIMES = [
 const hashKey = (s) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 const same = (a, b) => Math.abs(a - b) < 0.6;
 
+function workstation(pod, team, i) {
+  const row = Math.floor(i / SEATS_PER_ROW), right = i % 2;
+  const y = pod.y + SEAT_Y + row * DESK_PITCH;
+  if ((team + row) % 2 === 0) {
+    return { row, facing: right ? "west" : "east", x: pod.x + (right ? 70 : 14), y,
+      surfaceX: pod.x + (right ? 54 : 30), surfaceY: y, approachY: y - 18 };
+  }
+  const x = pod.x + (right ? 60 : 24);
+  return { row, facing: right ? "north" : "south", x, y: y + (right ? 12 : -8),
+    surfaceX: x, surfaceY: y + (right ? -2 : 1), approachY: y + (right ? 17 : -18) };
+}
+
+const DUTIES = {
+  desk: ["Team desks", "work"], hand: ["Team desks", "hand"], queue: ["Review desk", "paper"],
+  meeting: ["Meeting room", "sit"], library: ["Library", "work"], terminal: ["Server room", "work"],
+  radar: ["Call booth", "phone"], tasks: ["Planning wall", "board"], idle: ["Lounge", "stand"],
+  sleeping: ["Lounge", "sleep"], lobby: ["Lobby", "gone"],
+};
+export function officeDuty(s) {
+  const byStatus = { waiting: "hand", blocked: "queue", offline: "lobby", sleeping: "sleeping", idle: "idle" };
+  const station = stationFor(s);
+  const kind = byStatus[s.status] || (station === "forge" ? "desk" : ROOM_STATIONS.has(station) ? station : "meeting");
+  return { kind, label: DUTIES[kind][0], pose: DUTIES[kind][1] };
+}
+
 export class Office extends World {
   constructor(canvas, opts) {
     super(canvas, opts);
     this.roomba = { x: 0, dir: 1 };
+    const tile = document.createElement("canvas");
+    tile.width = tile.height = 12;
+    const g = tile.getContext("2d");
+    px(g,0,0,12,12,"#1b3036"); px(g,0,0,1,1,"#364a4d");
+    this.backdrop = this.bctx.createPattern(tile, "repeat");
   }
 
   // ------------------------------------------------------------ floor plan
 
+  setSessions(sessions) {
+    const counts = new Map();
+    for (const s of sessions) {
+      const project = s.cwd || s.project;
+      counts.set(project, (counts.get(project) || 0) + (s.parent ? 0 : 1));
+    }
+    const prev = this.staff;
+    this.staff = counts;
+    // World rebuilds on project changes; a growing team can also need a longer desk bank.
+    if (prev && counts.size === prev.size && [...counts.keys()].every(k => prev.has(k)) &&
+        [...counts].some(([k,n]) => this.deskRows(n) !== this.deskRows(prev.get(k)))) this.layout();
+    super.setSessions(sessions);
+  }
+
+  deskRows(n) { return Math.max(1, Math.ceil(n / SEATS_PER_ROW)); }
+
   layout() {
     const n = Math.max(1, this.projectOrder.length);
     const aspect = Math.max(0.5, Math.min(3, (this.cw || 1200) / (this.ch || 700)));
-    const cols = Math.max(1, Math.min(n, Math.ceil(Math.sqrt((n * aspect * 1.4 * (POD_H + ROWGAP)) / (POD_W + AISLE)))));
+    const cols = Math.max(1, Math.min(n, Math.max(4, Math.ceil(Math.sqrt(n * aspect * .7)))));
     const rows = Math.ceil(n / cols);
     const Lc = LEFTW + AISLE / 2;
     const vlines = Array.from({ length: cols + 1 }, (_, c) => Lc + c * (POD_W + AISLE));
     const FW = Math.max(MIN_FW, vlines[cols] + AISLE / 2 + 8);
     const Ct = TOPH + 12;
-    const podY = (r) => Ct + 18 + r * (POD_H + ROWGAP);
-    const wbY = TOPH + 16 + 3 * 34 + 8;
-    const Cb = Math.max(podY(rows - 1) + POD_H + 14, wbY + 74);
+    const rowY = [];
+    let y = Ct + 13;
+    for (let r = 0; r < rows; r++) {
+      rowY.push(y);
+      const teams = this.projectOrder.slice(r * cols, (r + 1) * cols);
+      y += Math.max(1, ...teams.map(k => this.deskRows(this.staff.get(k)))) * DESK_PITCH + ROWGAP;
+    }
+    const wbY = TOPH + 16 + BOOTHS * 30;
+    const Cb = Math.max(y + 6, wbY + 63);
     const by = Cb + 26, FH = by + BOTH;
-    const mw = Math.round(FW * 0.36), lw = Math.round(FW * 0.22), sw = Math.round(FW * 0.17);
+    const mw = Math.round(FW * 0.34), lw = Math.round(FW * 0.24), sw = Math.round(FW * 0.19);
     const rooms = {
       meeting: { x: 0, w: mw, door: mw - 26 },
       library: { x: mw, w: lw, door: mw + Math.round(lw / 2) + 14 },
@@ -64,14 +116,49 @@ export class Office extends World {
     };
     this.projects.clear();
     this.projectOrder.forEach((name, i) => {
-      const pod = { x: LEFTW + AISLE + (i % cols) * (POD_W + AISLE), y: podY(Math.floor(i / cols)), aisle: vlines[i % cols] };
+      const pod = { x: LEFTW + AISLE + (i % cols) * (POD_W + AISLE), y: rowY[Math.floor(i / cols)], aisle: vlines[i % cols], rows: this.deskRows(this.staff.get(name)) };
       const spawn = [FW - 40, by + 28];
-      this.projects.set(name, { name, index: i, pod, color: TEAM[i % TEAM.length], soft: TEAM_SOFT[i % TEAM_SOFT.length], stations: { hub: spawn, dock: spawn }, shore: [] });
+      const desks = Array.from({length: pod.rows * SEATS_PER_ROW}, (_,seat) => workstation(pod,i,seat));
+      this.projects.set(name, { name, index: i, pod, desks, color: TEAM[i % TEAM.length], stations: { hub: spawn, dock: spawn }, shore: [] });
     });
-    this.snapNext = !!this.laidOut;
-    this.laidOut = true;
+    // Opening the monitor shows a shift already in progress, not everyone at the lift.
+    this.snapNext = true;
     this.renderTerrain();
     if (!this.userPan) this.fit();
+  }
+
+  fit() {
+    if (!this.plan || !this.cw || !this.ch) return;
+    const { FW, FH } = this.plan;
+    const foot = 37;
+    this.scale = Math.max(.1, Math.min(5, (this.cw - 22) / (FW + 12), (this.ch - foot - 10) / (FH + 10)));
+    this.cam = {x: FW / 2, y: FH / 2 + (foot - 10) / (2 * this.scale)};
+    this.cameraTarget = null; this.dirty = true; this.sizeBuffer();
+  }
+
+  sizeBuffer() {
+    // Keep the room coordinates in world units. Only close-ups / high-DPI displays
+    // need the extra backing pixels for faceplates, controls and fabric stitching.
+    this.density = this.scale * this.dpr >= 1.5 ? 2 : 1;
+    this.buf.width = Math.ceil(this.cw / this.scale) * this.density;
+    this.buf.height = Math.ceil(this.ch / this.scale) * this.density;
+    this.bctx.setTransform(this.density, 0, 0, this.density, 0, 0);
+    this.bctx.imageSmoothingEnabled = false;
+  }
+
+  visit(room) {
+    const p = this.plan;
+    if (!p) return;
+    const to = {
+      meeting: [p.rooms.meeting.w / 2, 51, p.rooms.meeting.w + 22, TOPH + 25],
+      desk: [p.Lc + POD_W + AISLE, p.Ct + 56, Math.min(260, p.FW - p.Lc), 126],
+      break: [p.brW / 2, p.by + BOTH / 2, p.brW + 12, BOTH + 26],
+      queue: [p.rooms.boss.x + p.rooms.boss.w / 2, 62, p.rooms.boss.w + 45, TOPH + 44],
+    }[room];
+    this.scale = Math.max(.1, Math.min(5, this.cw / to[2], (this.ch - 35) / to[3]));
+    this.cam = {x: to[0], y: to[1] + 12 / this.scale};
+    this.userZoom = this.userPan = true;
+    this.cameraTarget = null; this.dirty = true; this.sizeBuffer();
   }
 
   /** A place a robot can be: its spot, how it stands there, and how to reach it from the corridors. */
@@ -87,11 +174,16 @@ export class Office extends World {
       const m = R.meeting, { cx, w } = P.meet;
       const E = topE(m);
       if (i < 4) {
-        const x = Math.round(cx + (i - 1.5) * (w / 4));
-        return this.spot(`meet${i}`, "meeting", x, 58, E, [...topVia(m), [m.door, 40], [x, 40]], { pose: "sit" });
+        const near = i % 2 === 1;
+        const x = Math.round(cx + (i < 2 ? -1 : 1) * w * .25);
+        const aisle = near ? 81 : 36;
+        return this.spot(`meet${i}`, "meeting", x, near ? 78 : 48, E,
+          [...topVia(m), [m.door, aisle], [x, aisle]], { pose: "sit", facing: near ? "north" : "south" });
       }
-      if (i === 4) return this.spot("meet4", "meeting", Math.round(cx - w / 2 - 10), 74, E, [...topVia(m), [m.door, 40], [Math.round(cx - w / 2 - 10), 40]], { pose: "sit" });
-      if (i === 5) return this.spot("meet5", "meeting", Math.round(cx + w / 2 + 10), 74, E, topVia(m), { pose: "sit" });
+      if (i === 4 || i === 5) {
+        const x = Math.round(cx + (i === 4 ? -1 : 1)*(w/2+7));
+        return this.spot(`meet${i}`, "meeting", x, 61, E, [...topVia(m),[x,TOPH-8]], { pose:"sit", facing:i === 4 ? "east" : "west" });
+      }
       return this.spot(`meet${i}`, "meeting", Math.round(cx - w / 2) + ((i - 6) % 8) * 14, 84, E, topVia(m));
     }
     if (kind === "library") {
@@ -107,14 +199,14 @@ export class Office extends World {
       return this.spot(`queue${i}`, "queue", x, TOPH + 9, [x, P.Ct], [], { pose: "paper" });
     }
     if (kind === "radar") {
-      const k = i % 3, y0 = TOPH + 16 + k * 34;
-      return this.spot(`booth${i}`, "booths", 36 + Math.floor(i / 3) * 18, y0 + 26, [P.Lc, y0 + 26], [[LEFTW - 6, y0 + 26]], { pose: "phone" });
+      const k = i % BOOTHS, y0 = TOPH + 16 + k * 30;
+      return this.spot(`booth${i}`, `booth:${k}`, 18 + (Math.floor(i / BOOTHS) % 3) * 14, y0 + 23, [P.Lc, y0 + 23], [[LEFTW - 6, y0 + 23]], { pose: "phone" });
     }
     if (kind === "tasks") {
-      return this.spot(`plan${i}`, "planning", 16 + (i % 5) * 16, P.wbY + 58 + Math.floor(i / 5) * 6, [P.Lc, P.wbY + 58], [[LEFTW - 6, P.wbY + 58]], { pose: "board" });
+      return this.spot(`plan${i}`, "planning", 12 + (i % 4) * 14, P.wbY + 52 + (Math.floor(i / 4) % 2) * 6, [P.Lc, P.wbY + 52], [[LEFTW - 6, P.wbY + 52]], { pose: "board" });
     }
     if (kind === "lobby") {
-      return this.spot(`lobby${i}`, "lobby", P.FW - 26 - (i % 8) * 14, P.by + 92 + Math.floor(i / 8) * 6, [P.lobbyDoor, P.Cb], [[P.lobbyDoor, P.by + 10]], { pose: "gone" });
+      return this.spot(`lobby${i}`, "lobby", P.FW - 26 - (i % 8) * 14, P.FH - 12 - (Math.floor(i / 8) % 2) * 10, [P.lobbyDoor, P.Cb], [[P.lobbyDoor, P.by + 10]], { pose: "gone" });
     }
     if (kind === "spawn") return this.spot("spawn", "lobby", P.FW - 40, P.by + 28, [P.lobbyDoor, P.Cb], [[P.lobbyDoor, P.by + 10]]);
     return null;
@@ -135,9 +227,9 @@ export class Office extends World {
 
   seat(r, i, pose) {
     const d = this.projects.get(r.project);
-    const row = Math.floor(i / 3) % 2, col = i % 3, extra = Math.floor(i / 6) * 5;
-    const x = d.pod.x + SEAT_X[col] + extra, y = d.pod.y + SEAT_Y[row];
-    return this.spot(`seat:${r.project}:${i}`, `pod:${r.project}`, x, y, [d.pod.aisle, y], [], { pose, desk: true });
+    const {row,x,y,approachY,facing} = d.desks[i];
+    return this.spot(`seat:${r.project}:${i}`, `pod:${r.project}:${row}`, x, y,
+      [d.pod.aisle, approachY], [[x, approachY]], { pose, desk:true, facing });
   }
 
   renderTerrain() {
@@ -147,16 +239,17 @@ export class Office extends World {
     c.width = FW + pad * 2; c.height = FH + pad * 2;
     const g = c.getContext("2d");
     g.translate(pad, pad);
-    px(g, -pad, -pad, c.width, c.height, "#1e2130");
+    px(g, -4, 0, FW + 16, FH + 12, "#151620");
     // Floors: light tiles everywhere, then each room's own floor.
-    F.drawFloor(g, 0, 0, FW, FH, "tile");
-    const roomFloor = { meeting: "wood", library: "wood", server: "server", boss: "wood" };
+    F.drawFloor(g, 0, 0, FW, FH, "studio");
+    const roomFloor = { meeting: "tile", library: "wood", server: "server", boss: "wood" };
     for (const [k, r] of Object.entries(R)) F.drawFloor(g, r.x, 20, r.w, TOPH - 34, roomFloor[k]);
     F.drawRug(g, R.library.x + R.library.w - 58, 64, 50, 22, "#5a7ab0", "#3f5a88");
-    F.drawRug(g, R.boss.x + 14, 40, R.boss.w - 28, 40, "#a85a5a", "#844040");
+    F.drawRug(g, R.boss.x + 14, 40, R.boss.w - 28, 40, "#76989a", "#486c77");
+    F.drawRug(g, 16, 37, R.meeting.w - 44, 45, "#a5b2b1", "#829294");
     F.drawFloor(g, 0, TOPH, LEFTW - 6, wbY - TOPH - 6, "dark");
     F.drawFloor(g, 0, by, brW, FH - by, "kitchen");
-    F.drawRug(g, 8, by + 62, 120, 40, "#7c8fb0", "#5f7090");
+    F.drawRug(g, 8, by + 64, 120, 30, "#d79e92", "#ad716f");
     F.drawFloor(g, brW, by, bathW, FH - by, "bath");
     F.drawFloor(g, brW + bathW, by, FW - brW - bathW, FH - by, "lobby");
     F.drawRug(g, FW - 58, by + 22, 36, 10, "#a85a5a", "#844040");
@@ -167,18 +260,18 @@ export class Office extends World {
     for (const r of Object.values(R)) if (r.x > 0) F.wallCapV(g, r.x - 3, -5, TOPH - 4);
     F.wallFace(g, 0, TOPH - 9, FW, 9);
     F.wallCapH(g, 0, TOPH - 14, FW);
-    const plates = { meeting: "MEETING", library: "LIBRARY", server: "SERVERS", boss: "MANAGER" };
+    const plates = { meeting: "MEETING", library: "LIBRARY", server: "SERVERS", boss: "REVIEW" };
     for (const [k, r] of Object.entries(R)) {
       F.doorway(g, r.door, TOPH - 9, 9);
       F.signPlate(g, plates[k], k === "boss" ? r.door + 12 : r.door - 12 - F.textWidth(plates[k]) - 4, TOPH - 9);
     }
     // Left column: phone booths behind a wall with an opening for each, then the planning corner.
-    const gaps = [0, 1, 2].map((k) => TOPH + 16 + k * 34 + 18);
+    const gaps = Array.from({ length: BOOTHS }, (_,k) => TOPH + 16 + k * 30 + 12);
     let y = TOPH;
     for (const gy of gaps) { F.wallCapV(g, LEFTW - 6, y, gy - y); y = gy + 14; }
     F.wallCapV(g, LEFTW - 6, y, wbY - 6 - y);
     F.wallCapH(g, 0, wbY - 6, LEFTW);
-    F.signPlate(g, "PHONES", 4, TOPH + 3);
+    F.signPlate(g, "CALLS", 4, TOPH + 3);
     F.signPlate(g, "PLANNING", 4, wbY + 1);
     // Bottom band: the corridor wall shows its face inside the rooms.
     F.wallFace(g, 0, by - 9, FW, 9);
@@ -211,14 +304,11 @@ export class Office extends World {
     for (const r of tops) {
       const s = r.session, st = s.status;
       let p = null;
-      if (st === "blocked") p = this.place("queue", take("queue"));
-      else if (st === "waiting") p = this.seat(r, seatIdx.get(r.key), "hand");
-      else if (st === "offline") p = this.place("lobby", take("lobby"));
-      else if (st === "sleeping") sleepers.push(r);
-      else if (st === "idle") idle.push(r);
-      else if (r.station === "forge") p = this.seat(r, seatIdx.get(r.key), "work");
-      else if (ROOM_STATIONS.has(r.station)) p = this.place(r.station, take(r.station));
-      else p = this.place("meeting", take("meeting"));
+      const duty = officeDuty(s);
+      if (duty.kind === "hand" || duty.kind === "desk") p = this.seat(r, seatIdx.get(r.key), duty.pose);
+      else if (duty.kind === "sleeping") sleepers.push(r);
+      else if (duty.kind === "idle") idle.push(r);
+      else p = this.place(duty.kind, take(duty.kind));
       if (!r.place) { r.place = this.place("spawn"); r.x = r.place.x; r.y = r.place.y; r.route = []; r.delay = this.snapNext ? 0 : stagger++ * 0.7; }
       if (r.prevStatus === "working" && st === "waiting") this.spawnFx(r.x, r.y - 12, "#ffd23f");
       r.prevStatus = st;
@@ -234,10 +324,12 @@ export class Office extends World {
       this.setPlace(r, this.breakSpot(k, false));
     });
     for (const r of this.robots.values()) {
-      if (!r.drone || r.init) continue;
+      if (!r.drone || (r.init && !this.snapNext)) continue;
       r.init = true;
       const parent = this.robots.get(r.session.parent);
       if (parent) { r.x = parent.x; r.y = parent.y - 20; }
+      else { const seat = this.seat(r, 0, "work"); r.x = seat.x; r.y = seat.y - 20; }
+      r.tx = r.x; r.ty = r.y;
     }
     this.snapNext = false;
   }
@@ -245,7 +337,7 @@ export class Office extends World {
   setPlace(r, p) {
     r.target = p;
     r.tx = p.x; r.ty = p.y;
-    if (this.snapNext) { r.place = p; r.x = p.x; r.y = p.y; r.route = []; }
+    if (this.snapNext) { r.place = p; r.x = p.x; r.y = p.y; r.route = []; r.walking = false; r.delay = 0; }
   }
 
   // ------------------------------------------------------------ routing
@@ -307,7 +399,10 @@ export class Office extends World {
       if (!r.target) continue;
       if (this.paused) { r.place = r.target; r.x = r.target.x; r.y = r.target.y; r.route = []; r.walking = false; continue; }
       if (r.delay > 0) { r.delay -= dt; continue; }
-      if (!r.route.length && r.place.key !== r.target.key) { r.route = this.path(r.place, r.target); r.place = r.target; }
+      if (!r.route.length) {
+        if (r.place.key !== r.target.key) r.route = this.path(r.place, r.target);
+        r.place = r.target; // Same desk, different pose (e.g. typing -> hand raised).
+      }
       let budget = SPEED * dt;
       while (budget > 0 && r.route.length) {
         const w = r.route[0];
@@ -344,7 +439,7 @@ export class Office extends World {
       const peers = drones.filter((d) => d.session.status === "working" && d.station === r.station);
       const k = peers.indexOf(r);
       let base;
-      if (r.station === "forge") { const parent = this.robots.get(s.parent); base = parent?.target ? { x: parent.target.x, y: parent.target.y } : null; }
+      if (r.station === "forge") base = this.seat(r, 0, "work");
       else if (ROOM_STATIONS.has(r.station)) base = this.place(r.station, k);
       else base = this.place("meeting", 6 + k);
       if (base) { r.tx = base.x + 12 + (k % 3) * 8; r.ty = base.y - 22 + Math.sin(this.t * 2 + r.phase) * 1.5; return; }
@@ -387,13 +482,16 @@ export class Office extends World {
 
   draw() {
     const g = this.bctx;
-    const W = this.buf.width, H = this.buf.height;
+    const W = this.buf.width / this.density, H = this.buf.height / this.density;
     const t = this.t;
     this.offX = Math.round(W / 2 - this.cam.x);
     this.offY = Math.round(H / 2 - this.cam.y);
     const ox = this.offX, oy = this.offY;
-    g.fillStyle = "#1e2130";
-    g.fillRect(0, 0, W, H);
+    g.save();
+    g.translate(ox, oy);
+    g.fillStyle = this.backdrop;
+    g.fillRect(-ox, -oy, W, H);
+    g.restore();
     if (this.terrain) g.drawImage(this.terrain.canvas, this.terrain.ox + ox, this.terrain.oy + oy);
     const P = this.plan;
     if (!P) return this.blit();
@@ -402,13 +500,10 @@ export class Office extends World {
     // Windows, boards and a clock on the back wall.
     const { cx, w } = P.meet;
     const meeting = this.arrivedAt("meet");
-    for (const [k, r] of Object.entries(R)) {
-      for (let x = r.x + 8; x + 20 < r.x + r.w - 6; x += 30) {
-        if (k === "meeting" && x + 20 > cx - 32 && x < cx + 32) continue;
-        if (k === "server") continue;
-        F.drawWindow(g, x + ox, 3 + oy, 20, 14, t, hour);
-      }
-    }
+    F.drawWindow(g, R.meeting.x + 6 + ox, 2 + oy, Math.max(22, cx-40), 17, t, hour);
+    F.drawWindow(g, cx + 34 + ox, 2 + oy, R.meeting.w - cx - 57, 17, t, hour);
+    F.drawWindow(g, R.library.x + 10 + ox, 2 + oy, R.library.w - 20, 17, t, hour);
+    F.drawWindow(g, R.boss.x + 12 + ox, 2 + oy, R.boss.w - 28, 17, t, hour);
     F.drawBoard(g, cx - 28 + ox, 3 + oy, 56, 15, t, meeting.length > 0);
     F.drawClock(g, R.meeting.x + R.meeting.w - 12 + ox, 10 + oy);
     F.drawAC(g, R.server.x + 8 + ox, 5 + oy);
@@ -416,15 +511,18 @@ export class Office extends World {
 
     const D = [];
     const add = (y, draw) => D.push({ y, draw });
+    const chair = ({x,y,facing}) => {
+      add(y-1, () => F.drawChair(g,x+ox,y+oy,facing));
+      if (facing === "north") add(y+1, () => F.drawChairBack(g,x+ox,y+oy,facing));
+    };
     const busyAt = (prefix) => this.arrivedAt(prefix).some((r) => r.session.status === "working");
     const queue = [...this.robots.values()].some((r) => r.session.status === "blocked");
 
     // Meeting room.
-    for (let i = 0; i < 6; i++) {
-      const s = this.place("meeting", i);
-      add(s.y - 1, () => F.drawChair(g, s.x + ox, s.y + oy));
-    }
-    add(70, () => F.drawMeetingTable(g, cx + ox, 70 + oy, w, t, meeting.length > 0));
+    F.drawSunlight(g, 6 + ox, 20 + oy, Math.max(22,cx-40), this.night);
+    F.drawSunlight(g, R.boss.x + 16 + ox, 20 + oy, 30, this.night);
+    for (let i = 0; i < 6; i++) chair(this.place("meeting", i));
+    add(70, () => F.drawMeetingTable(g, cx + ox, 70 + oy, w, meeting.length > 0));
     add(TOPH - 16, () => F.drawPlant(g, R.meeting.x + 12 + ox, TOPH - 16 + oy, true));
     add(36, () => F.drawPlant(g, R.meeting.x + R.meeting.w - 14 + ox, 36 + oy, false));
     // Library: shelves along the back wall, a reading corner on the rug.
@@ -443,32 +541,33 @@ export class Office extends World {
     add(TOPH - 16, () => F.drawPlant(g, boss.x + boss.w - 12 + ox, TOPH - 16 + oy, true));
     add(TOPH, () => F.drawDoorLight(g, boss.door - 12 + ox, TOPH - 4 + oy, t, queue));
     // Phone booths.
-    const boothBusy = new Set(this.arrivedAt("booth").filter((r) => r.session.status === "working").map((r) => Number(r.place.key.slice(5)) % 3));
-    for (let k = 0; k < 3; k++) {
-      const y0 = TOPH + 16 + k * 34;
-      add(y0, () => F.drawBooth(g, 6 + ox, y0 + oy, LEFTW - 20, 30, t, boothBusy.has(k)));
-      add(y0 + 31, () => F.drawBoothFront(g, 6 + ox, y0 + 30 + oy, LEFTW - 20));
+    const boothBusy = new Set(this.arrivedAt("booth").map((r) => Number(r.place.key.slice(5)) % BOOTHS));
+    for (let k = 0; k < BOOTHS; k++) {
+      const y0 = TOPH + 16 + k * 30;
+      add(y0, () => F.drawBooth(g, 6 + ox, y0 + oy, LEFTW - 20, 27, t, boothBusy.has(k)));
+      add(y0 + 28, () => F.drawBoothFront(g, 6 + ox, y0 + 27 + oy, LEFTW - 20));
     }
     // Planning corner.
-    add(P.wbY + 40, () => F.drawWhiteboard(g, 8 + ox, P.wbY + 40 + oy, LEFTW - 24, t, busyAt("plan")));
+    add(P.wbY + 48, () => F.drawWhiteboard(g, 8 + ox, P.wbY + 48 + oy, LEFTW - 24, t, busyAt("plan")));
     add(P.Cb + 6, () => F.drawPlant(g, 12 + ox, P.Cb + 6 + oy, true));
-    // Team pods: a partition behind each row of three desks, a chair behind every seat.
     for (const d of this.projects.values()) {
-      for (let row = 0; row < 2; row++) {
-        const py = d.pod.y + SEAT_Y[row] - 10;
-        add(py, () => F.drawPartition(g, d.pod.x + ox, py + oy, POD_W - 4, d.soft));
-      }
-      for (let i = 0; i < 6; i++) {
-        const row = Math.floor(i / 3), col = i % 3;
-        const x = d.pod.x + SEAT_X[col], y = d.pod.y + SEAT_Y[row];
+      for (const [i,desk] of d.desks.entries()) {
         const key = `seat:${d.name}:${i}`;
         const owner = this.owners?.get(key);
         const here = owner && !owner.walking && owner.place?.key === key && owner.target?.key === key;
         const mode = !owner ? "off" : here && owner.session.status === "working" ? "code" : here && owner.session.status === "waiting" ? "done" : "sleep";
-        add(y - 1, () => F.drawChair(g, x + ox, y + oy));
-        add(y + 1, () => F.drawDesk(g, x + ox, y + oy, t, mode, i + d.index * 7));
+        chair(desk);
+        add(desk.surfaceY+7, () => F.drawDesk(g,desk.surfaceX+ox,desk.surfaceY+oy,desk.facing,t,mode,i+d.index));
       }
-      add(d.pod.y + POD_H + 4, () => F.drawPlant(g, d.pod.x + POD_W - 2 + ox, d.pod.y + POD_H + 4 + oy, false));
+    }
+    // A quiet reading nook uses the last unoccupied bay rather than another empty desk.
+    const last = this.projects.get(this.projectOrder.at(-1));
+    if (last && last.pod.x + 2 * POD_W + AISLE < P.FW) {
+      const x = last.pod.x + POD_W + AISLE + 5, y = last.pod.y + SEAT_Y;
+      F.drawRug(g,x+ox,y-14+oy,72,28,"#a7b3a8","#7f9291");
+      add(y+4, () => F.drawCouch(g,x+5+ox,y+4+oy,37,"#71998d"));
+      add(y+6, () => F.drawSideTable(g,x+55+ox,y+6+oy));
+      add(y-5, () => F.drawPlant(g,x+67+ox,y-5+oy,true));
     }
     // Kitchen and lounge.
     const by = P.by, brW = P.brW;
@@ -518,9 +617,9 @@ export class Office extends World {
 
   blit() {
     const ctx = this.ctx, s = this.scale * this.dpr;
-    ctx.imageSmoothingEnabled = s < 1;
+    ctx.imageSmoothingEnabled = s < this.density;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(this.buf, 0, 0, this.buf.width * s, this.buf.height * s);
+    ctx.drawImage(this.buf, 0, 0, this.buf.width * s / this.density, this.buf.height * s / this.density);
     this.drawLabels(ctx, s, this.offX, this.offY);
   }
 
@@ -537,9 +636,10 @@ export class Office extends World {
     const blink = (t % 4) < 0.12;
     const eyes = st === "offline" ? "off" : st === "sleeping" || pose === "sleep" || blink ? "closed" : "open";
     const working = st === "working";
-    const arms = pose === "hand" ? true : (pose === "work" || pose === "board") && working ? Math.floor(t * 4) % 2 === 0 : false;
-    const sprite = robotSprite({ provider: s.provider, legs, arms, eyes, chest: STATUS[st]?.color || "#46e07a", gray: st === "offline" });
-    const lift = hover ? 3 : seated ? -2 : 0;
+    const arms = pose === "hand" || speaking || ((pose === "work" || pose === "board") && working && Math.floor(t * 4) % 2 === 0);
+    const sprite = crewSprite({ provider: s.provider, legs, arms, eyes, facing: arrived ? r.place.facing : undefined, chest: STATUS[st]?.color, gray: st === "offline" });
+    // Seats behind the conference table must show shoulders and a gesturing hand above its rim.
+    const lift = hover ? 3 : seated ? 1 : 0;
     const bob = r.walking ? (step ? -1 : 0) : hover ? Math.round(Math.sin(t * 3)) : 0;
     if (!seated) px(g, x - 5, y - 1, 11, 2, "rgba(0,0,0,0.25)");
     if (this.selected === r.key) {
@@ -547,7 +647,7 @@ export class Office extends World {
       const ay = y - 30 - lift + Math.round(Math.sin(this.t * 6) * 1.5);
       px(g, x - 2, ay, 5, 1, c); px(g, x - 1, ay + 1, 3, 1, c); px(g, x, ay + 2, 1, 1, c);
     }
-    g.drawImage(sprite, x - 6, y - 16 + bob - lift);
+    g.drawImage(sprite, x - 8, y - 18 + bob - lift, 16, 18);
     // Props: a form to sign, a phone, a coffee cup.
     const hy = y - 9 + bob - lift;
     if (pose === "paper") { obox(g, x + 5, hy - 2, 5, 6, "#ffffff"); px(g, x + 6, hy, 3, 1, "#9aa0b4"); px(g, x + 6, hy + 2, 2, 1, "#9aa0b4"); }
@@ -572,8 +672,8 @@ export class Office extends World {
     const working = st === "working";
     const x = Math.round(r.x + ox), y = Math.round(r.y + oy);
     const bob = Math.round(Math.sin(t * (working ? 7 : 4)));
-    const sprite = droneSprite({
-      provider: s.provider, rotor: st === "offline" ? 0 : Math.floor(t * (working ? 16 : 8)) % 2,
+    const sprite = crewSprite({
+      provider: s.provider, drone: true, rotor: st === "offline" ? 0 : Math.floor(t * (working ? 16 : 8)) % 2,
       eyes: st === "offline" ? "off" : st === "sleeping" ? "closed" : "open", chest: STATUS[st]?.color || "#46e07a", gray: st === "offline",
     });
     if (this.selected === r.key) {
@@ -581,7 +681,7 @@ export class Office extends World {
       const ay = y - 16 + Math.round(Math.sin(this.t * 6) * 1.5);
       px(g, x - 2, ay, 5, 1, c); px(g, x - 1, ay + 1, 3, 1, c); px(g, x, ay + 2, 1, 1, c);
     }
-    g.drawImage(sprite, x - 5, y - 5 + bob);
+    g.drawImage(sprite, x - 8, y - 9 + bob, 16, 18);
     if (working && ROOM_STATIONS.has(r.station)) drawToolFx(g, r.station, x + 7, y + 1 + bob, t);
     else if (working) drawBubble(g, "think", x + 1, y - 7 + bob, t, providerMeta(s.provider).body);
   }
@@ -593,7 +693,7 @@ export class Office extends World {
     ctx.font = `${fontPx}px "Press Start 2P", monospace`;
     // A hanging team sign over every pod.
     for (const d of this.projects.values()) {
-      const sx = (d.pod.x + POD_W / 2 - 2 + ox) * s, sy = (d.pod.y - 7 + oy) * s;
+      const sx = (d.pod.x + POD_W / 2 + ox) * s, sy = (d.pod.y + 2 + oy) * s;
       const full = (d.label || d.name).toUpperCase();
       let label = full.slice(0, 24);
       while (label.length > 3 && ctx.measureText(label).width + fontPx * 1.4 > (POD_W - 10) * s) label = label.slice(0, -1);

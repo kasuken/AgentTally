@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AgentTally",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "identifier": "dev.agenttally.app",
   "build": {
     "frontendDist": "../ui"
@@ -53,6 +53,6 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "See what your local AI coding agents are doing",
-    "longDescription": "AgentTally reads the local logs of Claude Code, Codex, GitHub Copilot, Gemini CLI and more, and shows every session as a 16-bit robot on a hex island per project."
+    "longDescription": "AgentTally reads local coding-agent logs and shows each session as a robot in a shared 32-bit-style pixel office. See which projects are coding, planning, or waiting for you."
   }
 }

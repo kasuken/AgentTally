@@ -2,8 +2,8 @@
   "name": "agent-tally",
   "private": true,
   "type": "module",
-  "version": "0.2.6",
-  "description": "16-bit hex world that shows what your local AI coding agents are doing",
+  "version": "0.3.0",
+  "description": "A living 32-bit-style pixel office for your local AI coding agents",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",

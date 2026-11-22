@@ -38,7 +38,7 @@ export function createDemo() {
     project: s.project,
     cwd: `C:\\code\\${s.project}`,
     model: s.model || null,
-    branch: i % 3 ? "main" : "feature/hex-world",
+    branch: i % 3 ? "main" : "feature/office-floor",
     client: null,
     parent: s.parentIdx !== undefined ? `${SEED[s.parentIdx].provider}:demo-${s.parentIdx}` : null,
     role: s.role || (s.parentIdx !== undefined ? "subagent" : null),
@@ -81,10 +81,23 @@ export function createDemo() {
     if (!active) s.lastTs = end;
   }
 
+  // Start with a shift already in progress. Give each simulated task time to play out
+  // before switching tools; real providers still report every event immediately.
+  const shift = sessions.filter(s => s.status === "working");
+  const nextAction = new Map();
+  shift.forEach((s,i) => {
+    const tool = TOOLS[s.provider]?.find(([,station]) => station === (s.parent ? "library" : "forge"));
+    const planning = !tool || (!s.parent && s.provider === "codex");
+    push(s, planning ? { ts:start, kind:"think", station:"hub", text:"Considering the next change" }
+      : { ts:start, kind:"tool", tool:tool[0], station:tool[1], text:tool[2] });
+    nextAction.set(s.key, start + 16000 + i * 2700);
+  });
+  let nextHandoff = start + 45000;
   function tick() {
     const now = Date.now();
     for (const s of sessions) {
-      if (s.status !== "working" || Math.random() < 0.45) continue;
+      if (s.status !== "working" || now < (nextAction.get(s.key) || 0)) continue;
+      nextAction.set(s.key, now + 14000 + Math.random() * 19000);
       const tools = TOOLS[s.provider] || [];
       const r = Math.random();
       if (r < 0.2) push(s, { ts: now, kind: "think", station: "hub", text: "" });
@@ -99,12 +112,15 @@ export function createDemo() {
       s.tokensOut += Math.floor(Math.random() * 400);
     }
     // Occasionally hand a turn back to you, or pick one up again.
-    if (Math.random() < 0.04) {
-      const w = sessions.find((s) => s.status === "waiting");
-      if (w) { w.status = "working"; push(w, { ts: now, kind: "user", station: "hub", text: "Looks good, continue" }); }
-    } else if (Math.random() < 0.03) {
-      const w = sessions.find((s) => s.status === "working" && !s.parent && s.provider !== "claude");
-      if (w) { w.status = "waiting"; push(w, { ts: now, kind: "done", station: "hub", text: "All tests pass." }); }
+    if (now >= nextHandoff) {
+      nextHandoff = now + 45000;
+      if (Math.random() < 0.5) {
+        const w = sessions.find((s) => s.status === "waiting");
+        if (w) { w.status = "working"; push(w, { ts: now, kind: "user", station: "hub", text: "Looks good, continue" }); }
+      } else {
+        const w = sessions.find((s) => s.status === "working" && !s.parent && s.provider !== "claude");
+        if (w) { w.status = "waiting"; push(w, { ts: now, kind: "done", station: "hub", text: "All tests pass." }); }
+      }
     }
     return {
       now,

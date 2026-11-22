@@ -9,12 +9,15 @@ Copilot, Gemini CLI, Antigravity and more, side by side.
 
 AgentTally has two interfaces over the same data, and you can switch between them at any time:
 
-- **Pixel** (default): a 16-bit hex world. Every project is an island, every agent session is a
-  small robot that walks to the building matching what it is doing right now.
+- **Pixel** (default): a shared 32-bit-style pixel office. Each project has a desk bank, and each
+  session is a robot that moves between rooms as its work changes. Choose **Open space** to see
+  agents typing, or **Meeting** to see thinking and replying visualized around the conference table.
 - **Pro**: a calm workspace dashboard with one panel per project, one row per session and a
   30-minute activity timeline.
 
-![The Pixel interface: seven project islands with robots at work](docs/screenshots/world.png)
+![The office floor with project desks, meeting rooms and the team directory](docs/screenshots/office.png)
+
+[Open-space close-up: robots face their monitors at paired desks](docs/screenshots/office-desks.png)
 
 ![The Pro interface: projects as panels with session timelines](docs/screenshots/pro.png)
 
@@ -59,28 +62,23 @@ sudo dnf install ./AgentTally-*.x86_64.rpm       # Fedora, RHEL
 
 Then just start your agents as usual. Sessions appear as soon as they write to their logs.
 
-## The Pixel world
+## The Pixel office
 
-Every project is a hex island with a **Core** in the middle and six buildings around it. Robots
-walk to the building that matches what their agent is doing, so one glance tells you who is
-reading code, who is editing, who is running commands, and who is waiting for **you**.
+Robots type at their project's desks when editing files, gather around the meeting table
+when thinking or replying, and visit the planning wall to organize tasks. Reading takes
+them to the library, commands to the server room, and web or MCP calls to the call booths.
+Meetings are a visual metaphor for session activity, not detected conversations between agents.
 
-| Station     | Activity                                   | Examples                                  |
-|-------------|--------------------------------------------|-------------------------------------------|
-| ◆ Core      | thinking, replying, waiting for you        | reasoning, final answer, permission asks  |
-| ▤ Library   | reading and searching code                 | `Read`, `Grep`, `Glob`, `view`, readFile  |
-| ⚒ Forge     | editing files                              | `Edit`, `Write`, `apply_patch`, replace   |
-| ▶ Terminal  | running commands                           | `Bash`, `exec_command`, `powershell`      |
-| ◎ Radar     | web and MCP tools                          | `WebFetch`, `web_search`, `mcp__*`        |
-| ✦ Quests    | planning and sub-agents                    | `TodoWrite`, `Agent`/`Task`, `update_plan`|
-| ⚡ Dock      | idle, sleeping or closed sessions          |                                           |
+When a robot needs permission it brings a form to the review desk. When its turn is done
+it raises a hand at its desk. Idle bots take breaks at the coffee counter or ping-pong
+table; sleeping bots settle in the lounge. Sub-agents appear as small drones.
 
-Robot bubbles: `…` thinking · yellow `!` finished its turn, **your turn** · red `?` waiting for
-permission · `Zzz` sleeping. The chest light shows the status colour. Sub-agents are small drones
-that orbit their parent robot. **Station guide** (bottom left of the map, or <kbd>?</kbd>) shows
-every building and what it means.
+Use **Room views** to get closer to the desks, meeting, lounge or review queue. **Fit** or
+<kbd>F</kbd> returns to the whole floor. **Room guide** explains the artwork and status
+bubbles. The original islands and freight yard are still available with <kbd>Y</kbd>;
+your map choice is remembered.
 
-<img src="docs/screenshots/guide.png" alt="The station guide with every building and status" width="720" />
+<img src="docs/screenshots/office-meeting.png" alt="Room close-up: robots at a meeting table in the Pixel office" width="720" />
 
 Each robot also has a colour and head for its agent: orange with a star antenna for Claude,
 white with a visor for Codex, purple or blue with goggles for Copilot, blue with a sparkle for
@@ -125,9 +123,7 @@ path, branch, model, start time, token usage, tool calls and the recent activity
 In the Pixel world the camera flies to the robot; in Pro view the row is highlighted. Approvals
 and replies still happen in the original agent application; AgentTally tells you where to look.
 
-| Pixel | Pro |
-|---|---|
-| ![Details of a session waiting for approval, Pixel](docs/screenshots/details.png) | ![Details of a session waiting for approval, Pro](docs/screenshots/pro-details.png) |
+![Details of a session waiting for approval, Pro](docs/screenshots/pro-details.png)
 
 ## Supported agents
 
@@ -184,7 +180,7 @@ the last snapshot, show a warning, and retry automatically.
 Both interfaces adapt to smaller windows, down to a narrow side-by-side view and a phone-sized
 single column:
 
-<img src="docs/screenshots/compact.png" alt="The Pixel interface in a narrow window" width="460" />
+<img src="docs/screenshots/office-compact.png" alt="The office floor on a small screen" width="390" />
 
 ## Build from source
 
@@ -255,7 +251,9 @@ ui/
   style.css         Pixel interface (default)
   pro.css           Pro interface, loaded instead of style.css
   js/main.js        data source, counters, session list, details, activity log, interface switch
-  js/world.js       hex map, layout, robots, camera, rendering (Pixel)
+  js/world.js       shared camera, input, frame loop, and the original hex map
+  js/office.js      office layout, session destinations, walking routes and rendering (Pixel)
+  js/office-sprites.js  original pixel interiors, furniture and room guide artwork
   js/board.js       project panels, session rows and activity timelines (Pro)
   js/sprites.js     pixel art: robots, tiles, buildings, bubbles
   js/selectors.js   time, project, provider, search, status, and sorting rules

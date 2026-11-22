@@ -1,9 +1,11 @@
 // Local-only dashboard controller. UI filters never change the underlying sessions.
 import { World } from "./world.js";
 import { Yard } from "./yard.js";
-import { Office } from "./office.js";
+import { Office, officeDuty } from "./office.js";
+import { drawRoomIcon } from "./office-sprites.js";
 import { Board } from "./board.js";
 import { robotSprite, droneSprite, drawBuilding } from "./sprites.js";
+import { crewSprite } from "./crew-art.js";
 import { providerMeta, STATUS, STATUS_TEXT, STATIONS, KIND_ICON, ago, compact, describe, escapeHtml as esc } from "./meta.js";
 import { createDemo } from "./demo.js";
 import { WINDOWS, selectSessions, sortSessions, nestSubagents, needsAttention, isResting, inWindow } from "./selectors.js";
@@ -30,23 +32,25 @@ function onSelect(key) {
   board.setSelected(key);
   renderSide(); renderRoster();
 }
-// Prototype maps for the Pixel interface: ?map=world|yard|office (?yard still works), or Y to cycle (remembered).
 const MAPS = {
-  world: { View: World },
-  yard: { View: Yard, label: "Animated freight yard: one depot per project, one truck per session.", hint: "Click a truck · Y: office" },
-  office: { View: Office, label: "Animated office: one team pod per project, one robot employee per session.", hint: "Click an agent · Y: hex world" },
+  office: { View: Office, name: "Office floor", code: "1F" },
+  world: { View: World, name: "Project islands", code: "HX" },
+  yard: { View: Yard, name: "Freight yard", code: "RY" },
 };
-const MAP_ORDER = ["world", "yard", "office"];
+const MAP_ORDER = Object.keys(MAPS);
 const mapParams = new URLSearchParams(location.search);
-let mapMode = mapParams.get("map") ?? (mapParams.has("yard") ? (mapParams.get("yard") === "0" ? "world" : "yard") : load("tally.map", "world"));
-if (!MAPS[mapMode]) mapMode = "world";
+let mapMode = mapParams.get("map") ?? (mapParams.has("yard") ? (mapParams.get("yard") === "0" ? "world" : "yard") : load("tally.map", "office"));
+if (!Object.hasOwn(MAPS, mapMode)) mapMode = "office";
 const world = new MAPS[mapMode].View($("world"), { onSelect });
-if (MAPS[mapMode].label) {
-  $("world").setAttribute("aria-label", `${MAPS[mapMode].label} Use the party list to inspect agents with a keyboard.`);
-  document.querySelector(".map-bottom .hint").textContent = `Drag to pan · Wheel to zoom · ${MAPS[mapMode].hint}`;
+$("floor-title").textContent = MAPS[mapMode].name;
+$("floor-number").textContent = MAPS[mapMode].code;
+$("world").setAttribute("aria-label", `${MAPS[mapMode].name}. Use the team directory to inspect agents with a keyboard.`);
+if (mapMode !== "office") {
+  $("station-guide").textContent = $("guide-title").textContent = "Map guide";
+  $("guide-intro").textContent = mapMode === "world" ? "Each project is an island. Robots travel between stations as agents read, edit and run commands." : "Each project is a depot. Trucks carry the activity of their sessions; small forklifts represent sub-agents.";
 }
 const board = new Board($("board"), { onSelect, now });
-// "pixel" is the 16-bit world (default); "pro" is the workspace board. Same data, same filters.
+// The pixel office and the Pro board share the same data and filters.
 const UIS = ["pixel", "pro"];
 let ui = document.documentElement.dataset.ui === "pro" ? "pro" : "pixel";
 const view = () => (ui === "pro" ? board : world);
@@ -55,18 +59,15 @@ const projectKey = (s) => s.cwd || s.project;
 const exactTime = (ts) => new Date(ts).toLocaleString();
 const time = (ts) => `<time data-ts="${ts}" title="${esc(exactTime(ts))}">${ago(now() - ts)}</time>`;
 const portraits = new Map();
-function portrait(provider, status) {
-  const key = provider + status;
-  if (!portraits.has(key)) portraits.set(key, robotSprite({ provider, legs: providerMeta(provider).hover ? "hover" : "stand", arms: false,
-    eyes: status === "offline" ? "off" : status === "sleeping" ? "closed" : "open", chest: STATUS[status]?.color, gray: status === "offline" }).toDataURL());
-  return portraits.get(key);
-}
-/** Sub-agents are drawn as drones everywhere: on the map, in the list and in the details. */
 function avatar(s) {
-  if (!s.parent) return portrait(s.provider, s.status);
-  const key = "drone" + s.provider + s.status;
-  if (!portraits.has(key)) portraits.set(key, droneSprite({ provider: s.provider, rotor: 0, portrait: true,
-    eyes: s.status === "offline" ? "off" : s.status === "sleeping" ? "closed" : "open", chest: STATUS[s.status]?.color, gray: s.status === "offline" }).toDataURL());
+  const office = ui === "pixel" && mapMode === "office", drone = !!s.parent;
+  const key = [office, drone, s.provider, s.status].join(":");
+  if (!portraits.has(key)) {
+    const draw = office ? crewSprite : drone ? droneSprite : robotSprite;
+    portraits.set(key, draw({ provider: s.provider, legs: providerMeta(s.provider).hover ? "hover" : "stand",
+      arms: false, drone, rotor: 0, portrait: true, eyes: s.status === "offline" ? "off" : s.status === "sleeping" ? "closed" : "open",
+      chest: STATUS[s.status]?.color, gray: s.status === "offline" }).toDataURL());
+  }
   return portraits.get(key);
 }
 const subagentRole = (s) => (s.role && s.role !== "subagent" ? s.role : "sub-agent");
@@ -109,6 +110,7 @@ function refresh() {
   renderCounters(); renderLegend(); renderProjects(); renderRoster(); renderSide(); renderLog(); renderFilters(); renderEmpty();
 }
 function renderConnection() {
+  $("office-clock").textContent = new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
   const stale = state.received && Date.now() - state.received > 12000;
   const failed = state.error || stale;
   const badge = $("source-badge");
@@ -208,6 +210,7 @@ function renderRoster() {
   reconcile($("roster"), rows, (b, { s, depth, kids }) => {
     const m = providerMeta(s.provider), st = STATUS[s.status];
     b.dataset.key = s.key;
+    b.style.setProperty("--crew-color", m.body);
     b.className = `card ${s.status}${depth ? " child" : ""}${kids.working ? " has-busy-kids" : ""} ${s.key === state.selected ? "sel" : ""}`;
     b.setAttribute("aria-pressed", s.key === state.selected);
     b.title = `${depth ? "Sub-agent: " : ""}${s.title} · ${s.cwd || s.project}`;
@@ -215,8 +218,9 @@ function renderRoster() {
       ? `<span class="tag sub" style="--c:${m.body}">SUB-AGENT</span>`
       : `<span class="tag" style="background:${m.body}">${esc(m.short)}</span>`;
     const where = depth ? subagentRole(s) : s.project;
+    const room = mapMode === "office" && ui === "pixel" && !s.parent ? `<span class="room-location">${esc(officeDuty(s).label)}</span>` : "";
     const subs = kids.total ? `<span class="subs${kids.working ? " busy" : ""}">${kidsLabel(kids)}</span>` : "";
-    html(b, `<img src="${avatar(s)}" alt="" /><span class="name">${tag}<b>${esc(s.title)}</b></span><span class="meta"><span class="project">${esc(where)}</span>${time(s.lastTs)}</span><span class="doing">${esc(describe(s.current))}</span><span class="status-line" style="color:${st.color}"><span class="dot"></span>${statusLabel(s.status)}${subs}<span class="provider-name">${esc(m.name)}</span></span>`);
+    html(b, `<img src="${avatar(s)}" alt="" /><span class="name">${tag}<b>${esc(s.title)}</b></span><span class="meta"><span class="project">${esc(where)}</span>${time(s.lastTs)}</span><span class="doing">${esc(describe(s.current))}</span><span class="status-line" style="color:${st.color}"><span class="dot"></span>${statusLabel(s.status)}${room}${subs}<span class="provider-name">${esc(m.name)}</span></span>`);
   });
   if (!rows.length) html($("roster"), '<li class="list-empty">No matching sessions.<br>Try another filter or clear your search.</li>');
 }
@@ -275,8 +279,9 @@ function renderFilters() {
   for (const b of document.querySelectorAll("[data-status]")) { b.classList.toggle("on", b.dataset.status === state.status); b.setAttribute("aria-pressed", b.dataset.status === state.status); }
   for (const b of $("window-filter").children) { b.classList.toggle("on", b.dataset.w === state.window); b.setAttribute("aria-pressed", b.dataset.w === state.window); }
   $("reset-filters").hidden = !hasFilters();
-  const islands = new Set(state.visible.map(projectKey)).size;
-  $("world-count").textContent = `${islands} project${islands === 1 ? "" : "s"}`;
+  const projects = new Set(state.visible.map(projectKey)).size;
+  $("world-count").textContent = `${projects} project${projects === 1 ? "" : "s"} · ${state.visible.length} agent${state.visible.length === 1 ? "" : "s"} in view`;
+  for (const b of $("room-rail").querySelectorAll("button")) b.disabled = !projects;
 }
 function hasFilters() { return !!(state.query || state.project || state.hidden.size || state.status !== "all" || state.window !== "6h"); }
 function renderEmpty() {
@@ -320,7 +325,7 @@ function applyUi(next) {
   board.setActive(ui === "pro");
   if (ui === "pixel") { world.dirty = true; world.recenter(); }
   if (state.selected) view().focus(state.selected);
-  renderSide();
+  renderSide(); renderRoster();
 }
 $("ui-toggle").onclick = () => { applyUi(ui === "pro" ? "pixel" : "pro"); save("tally.ui", ui); };
 function setMotion(paused) {
@@ -345,15 +350,42 @@ $("detail").addEventListener("click", async (e) => {
 $("help-button").onclick = () => $("help").showModal(); $("close-help").onclick = () => $("help").close();
 $("station-guide").onclick = () => $("help").showModal();
 // Use the actual map artwork in the guide so every silhouette has a clear meaning.
-for (const [station, meta] of Object.entries(STATIONS)) {
+const officeGuide = [
+  ["meeting","Meeting room","Thinking or replying"], ["desk","Team desks","Writing code"], ["library","Library","Reading code"],
+  ["terminal","Server room","Running commands"], ["radar","Call booths","Web and MCP tools"], ["tasks","Planning wall","Plans and delegation"],
+  ["queue","Review desk","Needs approval"], ["break","Lounge","Taking a break"],
+];
+if (mapMode === "office") {
+  const rail = $("room-rail");
+  for (const [room,name] of [["desk","Open space"],["meeting","Meeting"],["break","Lounge"],["queue","Review desk"]]) {
+    const button = document.createElement("button");
+    button.className = "room-jump";
+    button.setAttribute("aria-label", `Zoom to ${name.toLowerCase()}`);
+    const icon = document.createElement("canvas");
+    paintRoomIcon(icon, room);
+    button.append(icon, document.createTextNode(name));
+    button.onclick = () => world.visit(room);
+    rail.append(button);
+  }
+  rail.hidden = false;
+}
+const guide = mapMode === "office" ? officeGuide : Object.entries(STATIONS).map(([k,v]) => [k,v.label,v.verb]);
+function paintRoomIcon(canvas, room) {
+  canvas.width = 88; canvas.height = 96;
+  canvas.setAttribute("aria-hidden", "true");
+  const g = canvas.getContext("2d"); g.scale(2, 2);
+  drawRoomIcon(g, room);
+}
+for (const [station, name, verb] of guide) {
   const card = document.createElement("div");
   card.className = "station-card";
   const canvas = document.createElement("canvas");
   canvas.width = 44; canvas.height = 48;
   canvas.setAttribute("aria-hidden", "true");
-  drawBuilding(canvas.getContext("2d"), station, 22, 38, 0, false, "#59f3ff");
-  const label = document.createElement("strong"); label.textContent = meta.label;
-  const activity = document.createElement("span"); activity.textContent = meta.verb;
+  if (mapMode === "office") paintRoomIcon(canvas, station);
+  else drawBuilding(canvas.getContext("2d"), station, 22, 38, 0, false, "#59f3ff");
+  const label = document.createElement("strong"); label.textContent = name;
+  const activity = document.createElement("span"); activity.textContent = verb;
   card.append(canvas, label, activity);
   $("station-atlas").append(card);
 }
@@ -380,7 +412,7 @@ setInterval(() => {
     document.querySelectorAll("time[data-ts]").forEach((el) => { el.textContent = ago(now() - Number(el.dataset.ts)); });
   }
 }, 5000);
-$("logo-bot").getContext("2d").drawImage(robotSprite({provider:"claude",legs:"stand",arms:false,eyes:"open",chest:"#a0e4b5"}),0,0);
+$("logo-bot").getContext("2d").drawImage(crewSprite({provider:"tally",chest:"#a0e4b5"}),0,0);
 // Canvas text never triggers @font-face loading; request the pixel font explicitly and redraw once it arrives.
 document.fonts.load('10px "Press Start 2P"').then(() => { world.dirty = true; }).catch(() => {});
 setMotion(state.paused); applyUi(ui); renderFilters(); start();

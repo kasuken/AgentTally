@@ -1,16 +1,14 @@
-# AgentTally v0.2.6
+# AgentTally v0.3.0
 
-## One desktop buddy for all your agents
+## A shared office for your agents
 
-The desktop buddy from v0.2.5 showed one agent at a time. Now it is AgentTally's own robot, pink with a gold crown, and it reports on all your agents at once while AgentTally is minimized.
+Pixel view now opens on a 32-bit-style office. Its layout shows what each session is doing: an agent writing code types at its project desk, one running commands visits the server room, and one waiting for permission queues at the review desk. Thinking and replying appear as meetings; they don't imply that agents are talking to one another.
 
-- **The cloud** starts with a count of your agents by state (needs OK, your turn, working, idle), then lists what each busy agent is doing right now, with its project: "AgentTally · Edit: src/lib.rs", "shop-api · your turn". Agents that need you come first, up to four lines, then "+N more busy". A line flashes when its agent moves on to something new.
-- **The robot** acts out the overall picture: it waves and hops when any agent needs you, plays the tool animation of whichever agent acted last while any are working, reads or relaxes on the beach when they are all idle, and shows `Zzz` when they are all asleep.
-- Click the cloud or double-click the robot to bring AgentTally back. Drag the robot to move it. Clicks on the empty space around it still go through to the windows underneath.
+- **Room close-ups:** Choose Open space to see robots facing their monitors at paired desks, or Meeting to see them seated opposite one another. Lounge and Review desk also have close-ups. Press **F** to see the whole floor again.
+- **Team directory:** Match robot portraits to sessions, see which room an agent is headed to, and select it to inspect its activity.
+- **More maps:** Press **Y** in Pixel view to cycle between the office, project islands, and the new freight yard. **U** still switches between Pixel and Pro.
 
-The buddy is tested on Windows; on macOS and Linux the transparent window depends on the system, so please report anything that looks off.
-
-**Supported agents:** Claude Code, Codex, GitHub Copilot CLI, GitHub Copilot Chat (VS Code, Insiders, Cursor, VSCodium), Gemini CLI, Antigravity, plus activity-only support for OpenCode. AgentTally only reads local log files and never sends anything anywhere.
+No migration is required. Saved view preferences are respected, and AgentTally still only reads local logs. Reply to agents and approve requests in their original apps.
 
 ## Downloads
 

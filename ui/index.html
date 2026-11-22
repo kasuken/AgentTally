@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
   <title>AgentTally</title>
-  <!-- Two interfaces over the same page: "pixel" (default, 16-bit world) and "pro" (workspace board). -->
+  <link rel="icon" href="data:," />
+  <!-- Two interfaces over the same page: "pixel" (default office) and "pro" (workspace board). -->
   <script>try { if (JSON.parse(localStorage.getItem("tally.ui")) === "pro") document.documentElement.dataset.ui = "pro"; } catch (e) {}</script>
   <link id="theme-pixel" rel="stylesheet" href="style.css" />
   <link id="theme-pro" rel="stylesheet" href="pro.css" disabled />
@@ -14,7 +15,7 @@
 <body>
 <header class="topbar">
   <div class="logo">
-    <canvas id="logo-bot" width="13" height="16" aria-hidden="true"></canvas>
+    <span class="logo-tile"><canvas id="logo-bot" width="32" height="36" aria-hidden="true"></canvas></span>
     <div>
       <h1>Agent<span>Tally</span></h1>
       <p><span id="source-badge" class="source-badge">CONNECTING</span> <span id="subtitle" role="status">Scanning local logs…</span></p>
@@ -31,19 +32,35 @@
 </header>
 
 <main class="layout">
-  <section class="map-col" aria-label="Agent world and activity">
+  <section class="map-col" aria-label="Agent workspace and activity">
     <div class="win map-win">
       <div class="map" id="map-wrap">
-        <canvas id="world" class="pixel-only" role="img" aria-label="Animated project islands. Use the party list to inspect agents with a keyboard."></canvas>
+        <header class="floor-head pixel-only">
+          <div class="floor-number" aria-hidden="true" id="floor-number">1F</div>
+          <div class="floor-title"><h2 id="floor-title">Office floor</h2><p id="world-count"></p></div>
+          <div class="floor-clock" title="Local time"><i aria-hidden="true"></i><time id="office-clock"></time></div>
+          <button id="station-guide" class="btn">Room guide</button>
+        </header>
+        <div class="scene-shell pixel-only">
+          <nav class="room-rail" id="room-rail" aria-label="Room close-ups" hidden>
+            <h3>Room views</h3>
+          </nav>
+          <div class="stage">
+            <canvas id="world" role="img" aria-label="Animated office floor. Use the team directory to inspect agents with a keyboard."></canvas>
+            <div class="map-bottom">
+              <div class="hint">Drag to pan · Scroll to zoom</div>
+              <div class="map-controls">
+                <button class="btn" id="motion" aria-pressed="false" title="Pause animation; live data keeps updating">Ⅱ <span>Motion</span></button>
+                <button class="btn" id="zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
+                <button class="btn" id="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+                <button class="btn" id="recenter" title="Fit view (F)">⌖ <span>Fit</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="board pro-only" id="board" hidden aria-label="Workspace: projects and their sessions"></div>
         <div class="map-top">
-          <div class="legend" id="legend" aria-label="Sources"></div>
-          <div class="map-controls pixel-only">
-            <button class="btn" id="motion" aria-pressed="false" title="Pause animation; live data keeps updating">Ⅱ <span>Motion</span></button>
-            <button class="btn" id="zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
-            <button class="btn" id="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
-            <button class="btn" id="recenter" title="Fit all projects (F)">⌖ <span>Fit</span></button>
-          </div>
+          <span class="source-label pixel-only">Sources</span><div class="legend" id="legend" aria-label="Sources"></div>
         </div>
         <div id="connection-warning" class="connection-warning" role="status" hidden></div>
         <div class="empty" id="empty" hidden>
@@ -53,14 +70,10 @@
             <button class="btn" id="empty-reset">Reset filters</button>
           </div>
         </div>
-        <div class="map-bottom pixel-only">
-          <div class="station-key"><b id="world-count"></b><button id="station-guide" class="text-btn" title="See the buildings and what they mean">Station guide ↗</button></div>
-          <div class="hint">Drag to pan · Wheel to zoom · Click a robot</div>
-        </div>
       </div>
     </div>
     <section class="log win" aria-label="Activity stream">
-      <div class="win-head"><h3 data-pro="Activity">World log</h3><span id="updated" class="muted">Waiting for first scan</span></div>
+      <div class="win-head"><h3 data-pro="Activity">Activity journal</h3><span id="updated" class="muted">Waiting for first scan</span></div>
       <ol id="world-log"></ol>
     </section>
   </section>
@@ -69,7 +82,7 @@
     <section class="win detail" id="detail" hidden aria-label="Selected session"></section>
     <section class="win roster">
       <div class="win-head">
-        <h3><span data-pro="Sessions">Party</span> <span id="party-count"></span></h3>
+        <h3><span data-pro="Sessions">Team directory</span> <span id="party-count"></span></h3>
         <label><span class="sr-only">Sort sessions</span><select id="sort" aria-label="Sort sessions"><option value="attention">Needs you first</option><option value="recent">Recently active</option><option value="project">By project</option></select></label>
       </div>
       <p id="overview-summary" class="summary">Finding your agents…</p>
@@ -86,9 +99,9 @@
   </aside>
 </main>
 
-<dialog id="help" class="win">
-  <div class="help-heading"><h2 data-pro="Guide">Field guide</h2><button class="btn" id="close-help" aria-label="Close guide">✕</button></div>
-  <p data-pro="Each project is a panel in the workspace, with one row per agent session. The timeline shows the last 30 minutes of activity: each tick is one event, coloured by what the agent was doing. Indented rows are sub-agents.">Each island is a project. Robots travel between stations as agents read, edit, run commands, and think. Small drones are sub-agents.</p>
+<dialog id="help" class="win" aria-labelledby="guide-title">
+  <div class="help-heading"><h2 id="guide-title" data-pro="Guide">Room guide</h2><button class="btn" id="close-help" aria-label="Close guide">✕</button></div>
+  <p id="guide-intro" data-pro="Each project is a panel in the workspace, with one row per agent session. The timeline shows the last 30 minutes of activity: each tick is one event, coloured by what the agent was doing. Indented rows are sub-agents.">Each robot is an agent session. Its current activity decides where it works. Project teams share desk banks; their sub-agents appear as small drones.</p>
   <div id="station-atlas" class="station-atlas pixel-only" aria-label="Buildings and activities"></div>
   <div class="tone-legend pro-only" aria-label="Timeline colours"><span class="t-hub">Think</span><span class="t-library">Read</span><span class="t-forge">Edit</span><span class="t-terminal">Run</span><span class="t-radar">Web</span><span class="t-tasks">Plan</span><span class="t-user">Prompt</span><span class="t-done">Turn done</span><span class="t-error">Error</span></div>
   <div class="help-status">
@@ -96,9 +109,9 @@
     <p><b class="red">? NEEDS APPROVAL</b> Check the original app for a permission request.</p>
     <p><b class="gold">! YOUR TURN</b> The agent has finished its turn.</p>
   </div>
-  <p data-pro="Choose a session to read its latest activity. Filters apply to the workspace, session list, and activity log; the counters at the top stay scoped to your time window and enabled sources.">Choose a session to read its latest activity. Filters apply to the map, party list, and world log; the counters at the top stay scoped to your time window and enabled sources.</p>
+  <p>Choose a session to read its latest activity. Filters apply to the workspace, directory and activity journal. The counters always cover the selected time window and sources.</p>
   <p>LIVE includes active sessions and idle sessions seen in the last 15 minutes. Active sessions stay visible in every time window. OpenCode reports file activity only.</p>
-  <div class="shortcuts"><span><kbd>/</kbd> Search</span><span><kbd>F</kbd> <span data-pro="Back to top">Fit world</span></span><span><kbd>U</kbd> Pixel / Pro view</span><span><kbd>Esc</kbd> Close details</span><span><kbd>?</kbd> This guide</span></div>
+  <div class="shortcuts"><span><kbd>/</kbd> Search</span><span><kbd>F</kbd> <span data-pro="Back to top">Fit map</span></span><span><kbd>U</kbd> Pixel / Pro view</span><span class="pixel-only"><kbd>Y</kbd> Change map</span><span><kbd>Esc</kbd> Close details</span><span><kbd>?</kbd> This guide</span></div>
   <p class="muted">AgentTally reads local logs. Reply to agents and approve requests in their original applications. Motion can be paused independently of live updates.</p>
 </dialog>
 <script type="module" src="js/main.js"></script>

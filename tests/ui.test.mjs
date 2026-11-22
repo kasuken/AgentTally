@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { selectSessions, sortSessions, inWindow } from '../ui/js/selectors.js';
 import { World } from '../ui/js/world.js';
 import { HEX } from '../ui/js/sprites.js';
+import { Office } from '../ui/js/office.js';
 const now = 100_000_000;
 const session = (key, status, age = 0, other = {}) => ({ key, status, lastTs: now - age, project: 'app', provider: 'codex', title: key, ...other });
 const filters = { hidden: new Set(), window: '6h', status: 'all', query: '', project: '' };
@@ -53,6 +54,102 @@ test('cursor-anchored zoom keeps the world point beneath the cursor stationary',
   const before = [world.cam.x+(anchor.x-400)/world.scale,world.cam.y+(anchor.y-300)/world.scale];
   world.zoom(1,anchor);
   assert.deepEqual([world.cam.x+(anchor.x-400)/world.scale,world.cam.y+(anchor.y-300)/world.scale],before);
+});
+
+function officeFixture() {
+  return Object.assign(Object.create(Office.prototype), {
+    projectOrder: [], projects: new Map(), robots: new Map(), fx: [], t: 0,
+    cw: 800, ch: 500, paused: false, roomba: { x: 0, dir: 1 },
+    renderTerrain() {}, sizeBuffer() {},
+  });
+}
+test('office close-up pixels do not move the camera origin, labels or pointer targets', () => {
+  const r = {key:'a', x:72, y:50};
+  for (const dpr of [1, 2]) {
+    let blit, labelScale, transform;
+    const office = Object.assign(Object.create(Office.prototype), {
+      cam:{x:100,y:80}, cw:330, ch:186, scale:1.25, dpr, robots:new Map([['a',r]]),
+      canvas:{getBoundingClientRect:()=>({left:10,top:20})}, buf:{},
+      bctx:{setTransform(...args){transform=args;},save(){},translate(){},fillRect(){},restore(){}},
+      ctx:{setTransform(){},drawImage(...args){blit=args;}},
+      drawLabels(_,s){labelScale=s;},
+    });
+    office.sizeBuffer(); office.draw();
+    assert.equal(office.offX,32); assert.equal(office.offY,-5);
+    assert.deepEqual(transform,[dpr,0,0,dpr,0,0]);
+    assert.equal(blit[3],330*dpr); assert.equal(labelScale,1.25*dpr);
+    assert.equal(office.hit({clientX:10+(72+32)*1.25,clientY:20+(50-8-5)*1.25}),'a');
+  }
+});
+const editor = key => session(key, 'working', 0, { current: { kind: 'tool', station: 'forge' } });
+
+test('editors face their own work surfaces, including seats in an expanded desk bank', () => {
+  const office = officeFixture();
+  office.setSessions(['a','b','c','d'].map(editor));
+  const desks = [...office.projects.values()][0].desks;
+  const forward = { north:[0,-1], south:[0,1], east:[1,0], west:[-1,0] };
+  for (const [i,r] of [...office.robots.values()].entries()) {
+    const seat = r.target, desk = desks[i], [dx,dy] = forward[seat.facing];
+    assert.deepEqual([Math.sign(desk.surfaceX-seat.x),Math.sign(desk.surfaceY-seat.y)],[dx,dy]);
+    assert.deepEqual(seat.via.at(-1), [seat.x,seat.E[1]]);
+  }
+});
+
+test('the first meeting partners sit across the table; additional seats face inward', () => {
+  const office = officeFixture();
+  office.setSessions(Array.from({length:6}, (_,i) => session(String(i),'working')));
+  const seats = [...office.robots.values()].map(r=>r.target);
+  assert.equal(seats[0].x,seats[1].x);
+  assert.ok(seats[0].y < seats[1].y);
+  assert.deepEqual(seats.slice(0,2).map(s=>s.facing),['south','north']);
+  const {cx,w} = office.plan.meet;
+  assert.ok(seats.some(s=>s.x < cx-w/2 && s.facing === 'east'));
+  assert.ok(seats.some(s=>s.x > cx+w/2 && s.facing === 'west'));
+});
+
+test('office opens mid-shift and routes an editor through a doorway when its work changes', () => {
+  const office = officeFixture();
+  office.setSessions([editor('a')]);
+  const robot = office.robots.get('a');
+  assert.ok(robot.place.desk);
+  assert.equal(robot.place.pose, 'work');
+  assert.deepEqual([robot.x, robot.y], [robot.tx, robot.ty]);
+  office.setSessions([session('a', 'working')]);
+  office.update(.03);
+  assert.equal(robot.target.room, 'meeting');
+  assert.ok(robot.walking);
+  assert.ok(robot.route.some(w => w.x === office.plan.rooms.meeting.door), 'uses the meeting room door');
+  office.setPaused(true);
+  office.update(.03);
+  assert.deepEqual([robot.x, robot.y], [robot.target.x, robot.target.y]);
+  assert.equal(robot.walking, false);
+});
+
+test('changing status at the same desk raises a hand without another walk', () => {
+  const office = officeFixture();
+  office.setSessions([editor('a')]);
+  const r = office.robots.get('a'), key = r.place.key;
+  office.setSessions([session('a','waiting')]);
+  office.update(.03);
+  assert.equal(r.place.key, key);
+  assert.equal(r.place.pose, 'hand');
+  assert.equal(r.walking, false);
+  office.setSessions([session('a','blocked')]);
+  assert.equal(r.target.room, 'queue');
+});
+
+test('desk banks grow within a project and every editor still gets a reachable seat', () => {
+  const office = officeFixture();
+  office.setSessions([editor('a')]);
+  const sessions = Array.from({length: 12}, (_,i) => editor(String(i)));
+  office.setSessions(sessions);
+  const seats = [...office.robots.values()].map(r => r.target);
+  assert.equal(new Set(seats.map(p => `${p.x},${p.y}`)).size, sessions.length);
+  assert.ok(seats.every(p => p.y < office.plan.Cb && p.E[1] > office.plan.Ct && p.E[1] < office.plan.Cb));
+  office.visit('meeting');
+  const close = office.scale;
+  office.recenter();
+  assert.ok(office.scale < close && office.plan.FW * office.scale < office.cw);
 });
 test('empty map clears old terrain instead of allocating an invalid canvas', () => {
   const world = Object.assign(Object.create(World.prototype),{cells:[],terrain:{}});
