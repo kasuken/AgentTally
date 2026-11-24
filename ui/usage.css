@@ -1,0 +1,45 @@
+p { max-width: 80ch; }
+button { cursor: pointer; }
+.periods { display: flex; flex-shrink: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.periods button { border: 0; background: var(--surface); color: var(--ink); padding: 8px 13px; }
+.periods button[aria-pressed=true] { background: var(--blue); color: white; }
+.periods button:focus-visible { outline-offset: -3px; }
+.sub, figcaption, .date-axis { color: var(--sub); font-size: 13px; }
+#status { margin-bottom: 20px; color: var(--sub); font-size: 13px; }
+#error { border: 1px solid #dbbe8c; border-radius: 6px; background: #fff3db; color: #684114; padding: 12px; margin-bottom: 20px; }
+.layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.surface > header { flex-wrap: wrap; }
+.body { padding: 0 var(--inset) 22px; }
+.body > p { margin-top: 14px; }
+.total { font-size: 36px; font-weight: 620; letter-spacing: -.04em; }
+.tag { font-size: 12px; color: #704209; background: #fff0d5; padding: 2px 6px; border-radius: 4px; }
+figure { margin: 20px 0; }
+.trend { display: flex; align-items: end; justify-content: space-around; gap: 6px; height: 120px; border-bottom: 1px solid var(--line); }
+.trend span { flex: 1; background: #6381cf; min-width: 0; max-width: 52px; }
+.trend .empty { background: var(--line); height: 2px !important; }
+.date-axis { display: flex; justify-content: space-between; gap: 8px; padding-top: 5px; }
+figcaption { margin-top: 8px; }
+dl { margin: 12px 0; }
+dl div { display: flex; gap: 16px; justify-content: space-between; border-top: 1px solid var(--line); padding: 9px 0; font-size: 14px; }
+dt { color: var(--sub); }
+dd { text-align: right; overflow-wrap: anywhere; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; color: var(--sub); font-size: 12px; font-weight: 500; }
+th, td { padding: 9px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+th:not(:first-child), td:not(:first-child) { text-align: right; padding-left: 12px; }
+summary { cursor: pointer; color: var(--blue); }
+details { font-size: 13px; margin-top: 18px; }
+details p { margin-top: 10px; }
+.body h3 { margin-top: 22px; }
+.coverage { margin-top: 28px; }
+.coverage p { margin-top: 8px; }
+footer { margin-top: 28px; padding: 14px 0; border-top: 1px solid var(--line); color: var(--sub); font-size: 12px; }
+@media(max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .intro { align-items: start; flex-direction: column; }
+}
+@media(max-width: 560px) {
+  .periods { margin-top: 15px; width: max-content; }
+  .body { padding-bottom: 18px; }
+  .total { font-size: 30px; }
+}

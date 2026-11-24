@@ -1,13 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectSessions, sortSessions, inWindow } from '../ui/js/selectors.js';
-import { World } from '../ui/js/world.js';
-import { HEX } from '../ui/js/sprites.js';
-import { Office } from '../ui/js/office.js';
+import { selectSessions, sortSessions, inWindow, nestSubagents, streamEvents } from '../ui/js/selectors.js';
+import { groupProjects, timelineTicks, eventTone, TIMELINE_MS } from '../ui/js/board.js';
+import { sessionAction } from '../ui/js/meta.js';
+
 const now = 100_000_000;
-const session = (key, status, age = 0, other = {}) => ({ key, status, lastTs: now - age, project: 'app', provider: 'codex', title: key, ...other });
+const session = (key, status, age = 0, other = {}) => ({
+  key, status, lastTs: now - age, project: 'app', provider: 'codex', title: key, events: [], ...other,
+});
 const filters = { hidden: new Set(), window: '6h', status: 'all', query: '', project: '' };
-test('attention remains visible outside the historical window, while old idle sessions age out', () => {
+
+test('attention stays visible outside the historical window, while old idle sessions age out', () => {
   for (const status of ['working','blocked','waiting']) assert.equal(inWindow(session(status,status,30*3600e3),'1h',now),true);
   assert.equal(inWindow(session('old','idle',2*3600e3),'1h',now),false);
 });
@@ -15,7 +18,7 @@ test('live excludes sleeping/offline and only retains recent idle sessions', () 
   const sessions = [session('active','working'),session('recent','idle',60e3),session('old','idle',16*60e3),session('closed','offline'),session('sleep','sleeping')];
   assert.deepEqual(selectSessions(sessions,{...filters,window:'live'},now).map(s=>s.key),['active','recent']);
 });
-test('search, provider, status, and full project path filters compose', () => {
+test('search, provider, status and full project path filters compose', () => {
   const sessions = [session('a','blocked',0,{cwd:'C:/one/app',title:'Fix login'}),session('b','waiting',0,{cwd:'C:/two/app',title:'Fix login'}),session('c','blocked',0,{cwd:'C:/one/app',title:'Fix login',provider:'claude'})];
   const f = {...filters,query:' LOGIN ',project:'C:/one/app',status:'attention',hidden:new Set(['claude'])};
   assert.deepEqual(selectSessions(sessions,f,now).map(s=>s.key),['a']);
@@ -36,311 +39,66 @@ test('default order prioritizes approvals and remains stable as working logs upd
   list[0].lastTs += 1000;
   assert.deepEqual(sortSessions(list).map(s=>s.key),['b','w','a','z']);
   assert.equal(sortSessions(list,'recent')[0].key,'z');
-  assert.equal(list[0].key,'z'); // sorting must not mutate snapshots
+  assert.equal(list[0].key,'z');
 });
 test('project sorting groups projects before prioritizing status', () => {
   const list = [session('b','blocked',0,{project:'B'}),session('a','working',0,{project:'A'})];
   assert.deepEqual(sortSessions(list,'project').map(s=>s.key),['a','b']);
 });
-test('world fit can show a large map in a small viewport', () => {
-  const world = Object.assign(Object.create(World.prototype),{terrain:{minX:0,minY:0,maxX:1000,maxY:800},cam:{},cw:400,ch:300,userZoom:false,sizeBuffer(){}});
-  world.fit();
-  assert.ok(world.scale < 0.4);
-  assert.ok(1000*world.scale <= 400 && 800*world.scale <= 300);
+test('board sorts projects by attention, activity or name without separating children', () => {
+  const sessions = [
+    session('busy', 'working', 500, { project: 'A', cwd: '/a' }),
+    session('child', 'working', 0, { project: 'B', cwd: '/b', parent: 'parent' }),
+    session('parent', 'waiting', 1200, { project: 'B', cwd: '/b' }),
+    session('other', 'idle', 1500, { project: 'B', cwd: '/b' }),
+    session('approval', 'blocked', 1000, { project: 'C', cwd: '/c' }),
+  ];
+  const order = (sort) => groupProjects(sessions, sort).map(g => g.name);
+  assert.deepEqual(order(), ['C','B','A']);
+  assert.deepEqual(order('recent'), ['B','A','C']);
+  assert.deepEqual(order('project'), ['A','B','C']);
+  assert.deepEqual(groupProjects(sessions)[1].rows.map(r => [r.session.key,r.depth]), [['parent',0],['child',1],['other',0]]);
 });
-test('cursor-anchored zoom keeps the world point beneath the cursor stationary', () => {
-  const world = Object.assign(Object.create(World.prototype),{cam:{x:20,y:30},cw:800,ch:600,scale:2,sizeBuffer(){}});
-  const anchor = {x:600,y:120};
-  const before = [world.cam.x+(anchor.x-400)/world.scale,world.cam.y+(anchor.y-300)/world.scale];
-  world.zoom(1,anchor);
-  assert.deepEqual([world.cam.x+(anchor.x-400)/world.scale,world.cam.y+(anchor.y-300)/world.scale],before);
-});
-
-function cinemaFixture(robots = []) {
-  return Object.assign(Object.create(World.prototype), {
-    cam: { x: 10, y: 20 }, scale: 1, cw: 800, ch: 600, paused: false,
-    userPan: false, userZoom: false, cinema: null, cameraTarget: null,
-    robots: new Map(robots.map(r => [r.key, r])), sizeBuffer() {}, onCinemaStop() {},
-  });
-}
-test('cinema visits active agents, follows movement, and returns to the overview', () => {
-  const a = { key: 'a', x: 100, y: 80, session: { status: 'working' } };
-  const b = { key: 'b', x: 200, y: 100, session: { status: 'blocked' } };
-  const world = cinemaFixture([a, b]);
-  world.startCinema(); world.updateCinema(12);
-  assert.equal(world.cinema.key, 'b');
-  world.updateCinema(2);
-  assert.deepEqual(world.cam, { x: 200, y: 90 });
-  b.x = 210; world.updateCinema(1);
-  assert.ok(world.cam.x > 200 && world.cam.x < 210);
-  world.updateCinema(5); world.updateCinema(2);
-  assert.deepEqual(world.cam, { x: 10, y: 20 });
-  assert.equal(world.scale, 1);
-  assert.equal(world.userPan, false); assert.equal(world.userZoom, false);
-  world.updateCinema(25);
-  assert.equal(world.cinema.key, 'a');
-});
-test('cinema returns when its agent disappears and manual zoom stops it without restoring the view', () => {
-  const world = cinemaFixture([{ key: 'a', x: 100, y: 80, session: { status: 'working' } }]);
-  let stopped = 0; world.onCinemaStop = () => stopped++;
-  world.startCinema(); world.updateCinema(12); world.updateCinema(1);
-  world.robots.clear(); world.updateCinema(0.1); world.updateCinema(2);
-  assert.deepEqual(world.cam, { x: 10, y: 20 });
-  world.robots.set('a', { key: 'a', x: 100, y: 80, session: { status: 'working' } });
-  world.updateCinema(25); world.updateCinema(1);
-  const position = { ...world.cam };
-  world.zoom(1);
-  assert.equal(world.cinema, null);
-  assert.equal(stopped, 1);
-  assert.deepEqual(world.cam, position);
-});
-test('cinema waits for an active agent and cannot start while motion is paused', () => {
-  const world = cinemaFixture([{ key: 'idle', x: 0, y: 0, session: { status: 'idle' } }]);
-  world.paused = true; world.startCinema();
-  assert.equal(world.cinema, null);
-  world.paused = false; world.startCinema(); world.updateCinema(12);
-  assert.equal(world.cinema.phase, 'wait');
-  world.setPaused(true);
-  assert.equal(world.cinema, null);
-});
-
-function officeFixture() {
-  return Object.assign(Object.create(Office.prototype), {
-    projectOrder: [], projects: new Map(), robots: new Map(), fx: [], t: 0,
-    cw: 800, ch: 500, paused: false, roomba: { x: 0, dir: 1 },
-    renderTerrain() {}, sizeBuffer() {},
-  });
-}
-test('office close-up pixels do not move the camera origin, labels or pointer targets', () => {
-  const r = {key:'a', x:72, y:50};
-  for (const dpr of [1, 2]) {
-    let blit, labelScale, transform;
-    const office = Object.assign(Object.create(Office.prototype), {
-      cam:{x:100,y:80}, cw:330, ch:186, scale:1.25, dpr, robots:new Map([['a',r]]),
-      canvas:{getBoundingClientRect:()=>({left:10,top:20})}, buf:{},
-      bctx:{setTransform(...args){transform=args;},save(){},translate(){},fillRect(){},restore(){}},
-      ctx:{setTransform(){},drawImage(...args){blit=args;}},
-      drawLabels(_,s){labelScale=s;},
-    });
-    office.sizeBuffer(); office.draw();
-    assert.equal(office.offX,32); assert.equal(office.offY,-5);
-    assert.deepEqual(transform,[dpr,0,0,dpr,0,0]);
-    assert.equal(blit[3],330*dpr); assert.equal(labelScale,1.25*dpr);
-    assert.equal(office.hit({clientX:10+(72+32)*1.25,clientY:20+(50-8-5)*1.25}),'a');
-  }
-});
-const editor = key => session(key, 'working', 0, { current: { kind: 'tool', station: 'forge' } });
-
-test('editors face their own work surfaces, including seats in an expanded desk bank', () => {
-  const office = officeFixture();
-  office.setSessions(['a','b','c','d'].map(editor));
-  const desks = [...office.projects.values()][0].desks;
-  const forward = { north:[0,-1], south:[0,1], east:[1,0], west:[-1,0] };
-  for (const [i,r] of [...office.robots.values()].entries()) {
-    const seat = r.target, desk = desks[i], [dx,dy] = forward[seat.facing];
-    assert.deepEqual([Math.sign(desk.surfaceX-seat.x),Math.sign(desk.surfaceY-seat.y)],[dx,dy]);
-    assert.deepEqual(seat.via.at(-1), [seat.x,seat.E[1]]);
-  }
-});
-
-test('the first meeting partners sit across the table; additional seats face inward', () => {
-  const office = officeFixture();
-  office.setSessions(Array.from({length:6}, (_,i) => session(String(i),'working')));
-  const seats = [...office.robots.values()].map(r=>r.target);
-  assert.equal(seats[0].x,seats[1].x);
-  assert.ok(seats[0].y < seats[1].y);
-  assert.deepEqual(seats.slice(0,2).map(s=>s.facing),['south','north']);
-  const {cx,w} = office.plan.meet;
-  assert.ok(seats.some(s=>s.x < cx-w/2 && s.facing === 'east'));
-  assert.ok(seats.some(s=>s.x > cx+w/2 && s.facing === 'west'));
-});
-
-test('office opens mid-shift and routes an editor through a doorway when its work changes', () => {
-  const office = officeFixture();
-  office.setSessions([editor('a')]);
-  const robot = office.robots.get('a');
-  assert.ok(robot.place.desk);
-  assert.equal(robot.place.pose, 'work');
-  assert.deepEqual([robot.x, robot.y], [robot.tx, robot.ty]);
-  office.setSessions([session('a', 'working')]);
-  office.update(.03);
-  assert.equal(robot.target.room, 'meeting');
-  assert.ok(robot.walking);
-  assert.ok(robot.route.some(w => w.x === office.plan.rooms.meeting.door), 'uses the meeting room door');
-  office.setPaused(true);
-  office.update(.03);
-  assert.deepEqual([robot.x, robot.y], [robot.target.x, robot.target.y]);
-  assert.equal(robot.walking, false);
-});
-
-test('changing status at the same desk raises a hand without another walk', () => {
-  const office = officeFixture();
-  office.setSessions([editor('a')]);
-  const r = office.robots.get('a'), key = r.place.key;
-  office.setSessions([session('a','waiting')]);
-  office.update(.03);
-  assert.equal(r.place.key, key);
-  assert.equal(r.place.pose, 'hand');
-  assert.equal(r.walking, false);
-  office.setSessions([session('a','blocked')]);
-  assert.equal(r.target.room, 'queue');
-});
-
-test('desk banks grow within a project and every editor still gets a reachable seat', () => {
-  const office = officeFixture();
-  office.setSessions([editor('a')]);
-  const sessions = Array.from({length: 12}, (_,i) => editor(String(i)));
-  office.setSessions(sessions);
-  const seats = [...office.robots.values()].map(r => r.target);
-  assert.equal(new Set(seats.map(p => `${p.x},${p.y}`)).size, sessions.length);
-  assert.ok(seats.every(p => p.y < office.plan.Cb && p.E[1] > office.plan.Ct && p.E[1] < office.plan.Cb));
-  office.visit('meeting');
-  const close = office.scale;
-  office.recenter();
-  assert.ok(office.scale < close && office.plan.FW * office.scale < office.cw);
-});
-test('empty map clears old terrain instead of allocating an invalid canvas', () => {
-  const world = Object.assign(Object.create(World.prototype),{cells:[],terrain:{}});
-  world.renderTerrain();
-  assert.equal(world.terrain,null);
-});
-test('paused motion still applies new robot positions and camera focus', () => {
-  const robot = {x:0,y:0,tx:20,ty:30,drone:false};
-  const world = Object.assign(Object.create(World.prototype),{paused:true,cam:{x:0,y:0},cameraTarget:{x:40,y:50},robots:new Map([['r',robot]]),fx:[]});
-  world.update(.03);
-  assert.equal(robot.x,20); assert.equal(robot.y,30); assert.equal(robot.walking,false);
-  assert.deepEqual(world.cam,{x:40,y:50});
-});
-test('fit frames the islands, not the surrounding water ring', () => {
-  const terrain = {minX:-300,minY:-300,maxX:300,maxY:300,land:{minX:-100,minY:-50,maxX:100,maxY:50}};
-  const world = Object.assign(Object.create(World.prototype),{terrain,cam:{},cw:800,ch:400,userZoom:false,sizeBuffer(){}});
-  world.fit();
-  assert.equal(world.cam.x,0);
-  assert.ok(world.scale >= 2, `scale ${world.scale} should use the land bounds`);
-});
-
-test('fit leaves the land clear of the map controls and station guide', () => {
-  for (const [cw, ch, top] of [[800, 400, 62], [390, 440, 86]]) {
-    const land = {minX:-100,minY:-50,maxX:100,maxY:50};
-    const world = Object.assign(Object.create(World.prototype), {terrain:{land},cam:{},cw,ch,userZoom:false,sizeBuffer(){}});
-    world.fit();
-    const screenTop = ch / 2 + (land.minY - HEX.h / 2 - world.cam.y) * world.scale;
-    const screenBottom = ch / 2 + (land.maxY + HEX.h / 2 + HEX.side - world.cam.y) * world.scale;
-    assert.ok(screenTop >= top - 0.01);
-    assert.ok(screenBottom <= ch - 38 + 0.01);
-  }
-});
-
-test('each project remains a separate island with all seven stations', () => {
-  const world = Object.assign(Object.create(World.prototype), {
-    projectOrder:Array.from({length:12}, (_, i) => `project-${i}`), projects:new Map(),
-    cw:1200,ch:700,userPan:true,renderTerrain(){},
-  });
-  world.layout();
-  const land = new Set(world.cells.filter(c => c.kind !== 'water').map(c => c.cell.join(',')));
-  let islands = 0;
-  while (land.size) {
-    islands++;
-    const pending = [land.values().next().value];
-    land.delete(pending[0]);
-    while (pending.length) {
-      const [q,r] = pending.pop().split(',').map(Number);
-      for (const [dq,dr] of [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]]) {
-        const key = `${q+dq},${r+dr}`;
-        if (land.delete(key)) pending.push(key);
-      }
-    }
-  }
-  assert.equal(islands, world.projectOrder.length);
-  for (const project of world.projects.values()) assert.equal(Object.keys(project.stations).length, 7);
-});
-
-test('idle robots wait at the dock, then take up a pastime on their island until work resumes', () => {
-  const world = Object.assign(Object.create(World.prototype), {
-    projectOrder:['app'], projects:new Map(), robots:new Map(), cw:1200, ch:700, userPan:true, renderTerrain(){}, t:0, paused:false, fx:[],
-  });
-  world.layout();
-  const proj = world.projects.get('app');
-  const robot = {key:'r', x:0, y:0, project:'app', station:'dock', drone:false, session:session('r','idle')};
-  world.robots.set('r', robot);
-  world.assignSlots();
-  const slot = [...robot.slot];
-  world.update(.03);
-  assert.equal(robot.leisure, undefined, 'not straight away');
-  world.t = 31; world.update(.03);
-  assert.ok(['fish','beach','read'].includes(robot.leisure?.kind));
-  assert.ok(proj.shore.includes(robot.leisure.spot), 'on its own island');
-  assert.notEqual(robot.leisure.spot.dr, 2, 'not hidden behind the project sign');
-  assert.deepEqual([robot.tx, robot.ty], [robot.leisure.x, robot.leisure.y]);
-  const first = robot.leisure.kind;
-  world.t = robot.leisure.until + 1; world.update(.03);
-  assert.notEqual(robot.leisure.kind, first, 'a different pastime next');
-  robot.session = session('r','working'); world.update(.03);
-  assert.equal(robot.leisure, null);
-  assert.deepEqual([robot.tx, robot.ty], slot);
-});
-
-test('a robot whose turn is done goes out too, and an approval request keeps it at the core', () => {
-  const world = Object.assign(Object.create(World.prototype), {
-    projectOrder:['app'], projects:new Map(), robots:new Map(), cw:1200, ch:700, userPan:true, renderTerrain(){}, t:0, paused:false, fx:[],
-  });
-  world.layout();
-  const robot = {key:'r', x:0, y:0, project:'app', station:'hub', drone:false, session:session('r','waiting')};
-  world.robots.set('r', robot);
-  world.assignSlots();
-  world.update(.03);
-  world.t = 31; world.update(.03);
-  assert.ok(robot.leisure, 'waiting for you counts as nothing to do');
-  // Waiting turning into idle keeps the outing going.
-  const outing = robot.leisure;
-  robot.session = session('r','idle'); world.update(.03);
-  assert.equal(robot.leisure, outing);
-  robot.session = session('r','blocked'); world.update(.03);
-  assert.equal(robot.leisure, null);
-  world.t = 100; world.update(.03);
-  assert.equal(robot.leisure, null);
-});
-
-// ---------------------------------------------------------------- pro workspace board
-import { groupProjects, timelineTicks, eventTone, TIMELINE_MS } from '../ui/js/board.js';
-
-test('board puts projects that need you first and keeps sub-agents under their parent', () => {
-  const s = (key, status, other = {}) => ({ ...session(key, status, 0, other), toolCalls: 0, events: [], stations: [0,0,0,0,0,0] });
-  const groups = groupProjects([
-    s('busy', 'working', { project: 'a', cwd: '/a' }),
-    s('child', 'working', { project: 'b', cwd: '/b', parent: 'parent' }),
-    s('parent', 'waiting', { project: 'b', cwd: '/b' }),
-    s('other', 'idle', { project: 'b', cwd: '/b' }),
-    s('approval', 'blocked', { project: 'c', cwd: '/c' }),
-  ]);
-  assert.deepEqual(groups.map(g => g.name), ['c', 'b', 'a']);
-  assert.deepEqual(groups[1].rows.map(r => [r.session.key, r.depth]), [['parent', 0], ['child', 1], ['other', 0]]);
-});
-
-test('timeline keeps only events from the last 30 minutes, placed by time', () => {
+test('timeline places observations on a shared axis without extending to future events', () => {
   const events = [
     { ts: now - TIMELINE_MS - 1, kind: 'tool', station: 'forge' },
     { ts: now - TIMELINE_MS / 2, kind: 'tool', station: 'terminal' },
-    { ts: now, kind: 'think' },
-    { ts: now - 1000, kind: 'system' },
+    { ts: now, kind: 'think' }, { ts: now - 1000, kind: 'system' }, { ts: now + 1, kind: 'tool' },
   ];
-  const ticks = timelineTicks(events, now);
-  assert.deepEqual(ticks.map(t => [Math.round(t.left), t.tone]), [[50, 'terminal'], [100, 'hub']]);
+  assert.deepEqual(timelineTicks(events, now).map(t => [Math.round(t.left), t.tone]), [[50, 'terminal'], [100, 'hub']]);
   assert.equal(eventTone({ kind: 'user' }), 'user');
 });
-
-// ---------------------------------------------------------------- sub-agents
-import { nestSubagents } from '../ui/js/selectors.js';
-
-test('sub-agents are listed right under their parent, with a count of the busy ones', () => {
-  const list = sortSessions([
-    session('parent', 'waiting'),
-    session('kid-a', 'working', 0, { parent: 'parent' }),
-    session('other', 'blocked'),
-    session('kid-b', 'idle', 0, { parent: 'parent' }),
-    session('orphan', 'working', 0, { parent: 'gone' }),
+test('an approval request from a nested agent brings its entire branch to the front', () => {
+  const list = [
+    session('parent','idle'), session('sibling','working',0,{parent:'parent'}), session('unrelated','waiting'),
+    session('intermediate','idle',0,{parent:'parent'}), session('approval','blocked',0,{parent:'intermediate'}),
+  ];
+  assert.deepEqual(groupProjects(list)[0].rows.map(r=>[r.session.key,r.depth]),[
+    ['parent',0],['intermediate',1],['approval',2],['sibling',1],['unrelated',0],
   ]);
-  const rows = nestSubagents(list);
-  assert.deepEqual(rows.map((r) => [r.key, r.depth]), [['other', 0], ['parent', 0], ['kid-a', 1], ['kid-b', 1], ['orphan', 0]]);
-  assert.deepEqual(rows[1].kids, { total: 2, working: 1 });
+});
+test('sub-agents are listed right under their parent, with a count of the busy ones', () => {
+  const rows = nestSubagents(sortSessions([
+    session('parent','waiting'),session('kid-a','working',0,{parent:'parent'}),session('other','blocked'),
+    session('kid-b','idle',0,{parent:'parent'}),session('orphan','working',0,{parent:'gone'}),
+  ]));
+  assert.deepEqual(rows.map(r=>[r.key,r.depth]),[['other',0],['parent',0],['kid-a',1],['kid-b',1],['orphan',0]]);
+  assert.deepEqual(rows[1].kids,{total:2,working:1});
+});
+test('stream rows survive equal timestamps, insertions, and sessions with no detailed events', () => {
+  const first = session('a','working',0,{events:[
+    {ts:10,kind:'tool',tool:'view',text:'x'}, {ts:10,kind:'tool',tool:'view',text:'y'}, {ts:12,kind:'think',text:''},
+  ]});
+  const second = session('b','idle');
+  const before = streamEvents([first,second]).map(r => r.key);
+  assert.equal(before.length, 2); assert.notEqual(...before);
+  second.events.push({ts:20,kind:'done',text:'ok'});
+  const after = streamEvents([first,second]);
+  assert.equal(after[0].s.key, 'b'); assert.deepEqual(after.slice(1).map(r=>r.key), before);
+});
+test('presence-only observations never imply a reported action or an idle session', () => {
+  const placeholder = session('legacy','working',0,{presenceOnly:true});
+  assert.equal(sessionAction(placeholder),'File activity only');
+  assert.equal(sessionAction({...placeholder,presenceOnly:false}),'No action reported');
+  assert.equal(sessionAction(session('read','working',0,{current:{kind:'tool',station:'library',tool:'Read',text:'app.js'}})),'Read: app.js');
 });

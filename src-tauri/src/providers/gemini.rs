@@ -2,15 +2,14 @@
 //! The whole conversation is rewritten on every update, so it is re-read in full.
 
 use crate::model::{Activity, Kind, Session};
-use crate::util::{clean_prompt, clip, s, summarize_args, ts_of, u64_at};
+use crate::util::{clean_prompt, clip, s, summarize_args, ts_of};
 use serde_json::Value;
 
 pub fn apply_document(sess: &mut Session, doc: &Value) {
     sess.events.clear();
     sess.tool_calls = 0;
     sess.station_counts = [0; 6];
-    sess.tokens_in = 0;
-    sess.tokens_out = 0;
+    sess.observe_usage(super::Format::Gemini, doc);
     sess.touch(ts_of(doc.get("startTime")));
 
     let messages = doc.get("messages").and_then(Value::as_array);
@@ -27,8 +26,6 @@ pub fn apply_document(sess: &mut Session, doc: &Value) {
                 if let Some(model) = s(m, "model") {
                     sess.model = Some(model.to_string());
                 }
-                sess.tokens_in += u64_at(m, &["tokens", "input"]) + u64_at(m, &["tokens", "cached"]);
-                sess.tokens_out += u64_at(m, &["tokens", "output"]);
                 if m.get("thoughts").and_then(Value::as_array).map(|a| !a.is_empty()).unwrap_or(false) {
                     sess.push(Activity::new(ts, Kind::Think, ""));
                 }

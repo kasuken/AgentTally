@@ -1,64 +1,75 @@
-//! Desktop buddy: while the main window is minimized, one robot stands on the desktop in a
-//! small borderless, transparent, always-on-top window and keeps acting out what its agent does.
+//! An always-on-top compact status window follows the dashboard's minimize/restore lifecycle.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Runtime, Window, WindowEvent};
 
 pub const LABEL: &str = "buddy";
-/// Gap between the buddy and the screen edges, in logical pixels.
+/// Gap between the compact window and the screen edges, in logical pixels.
 const MARGIN: f64 = 16.0;
 
 static SHOWN: AtomicBool = AtomicBool::new(false);
 static PLACED: AtomicBool = AtomicBool::new(false);
 
-/// Follows the main window: minimizing it brings the buddy out, restoring it sends it back.
 pub fn on_main_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     match event {
-        // Minimizing and restoring both arrive as resizes on Windows and Linux.
-        WindowEvent::Resized(_) => set_visible(window.app_handle(), window.is_minimized().unwrap_or(false)),
-        // The hidden buddy window would otherwise keep the app alive without any visible window.
+        WindowEvent::Resized(_) | WindowEvent::Focused(_) => {
+            if let Ok(minimized) = window.is_minimized() {
+                set_visible(window.app_handle(), minimized);
+            }
+        }
+        // The hidden compact window would otherwise keep the app running.
         WindowEvent::Destroyed => window.app_handle().exit(0),
         _ => {}
     }
 }
 
 fn set_visible<R: Runtime>(app: &AppHandle<R>, show: bool) {
-    if SHOWN.swap(show, Ordering::SeqCst) == show {
+    if SHOWN.load(Ordering::SeqCst) == show {
         return;
     }
-    let Some(buddy) = app.get_webview_window(LABEL) else { return };
-    if show {
-        if !PLACED.swap(true, Ordering::SeqCst) {
-            place(app, &buddy);
+    let Some(buddy) = app.get_webview_window(LABEL) else {
+        return;
+    };
+    let result = if show {
+        if !PLACED.load(Ordering::SeqCst) || buddy.current_monitor().ok().flatten().is_none() {
+            PLACED.store(place(app, &buddy).is_some(), Ordering::SeqCst);
         }
-        let _ = buddy.show();
-        let _ = buddy.set_always_on_top(true);
+        buddy.show()
     } else {
-        let _ = buddy.hide();
+        buddy.hide()
+    };
+    if result.is_ok() {
+        SHOWN.store(show, Ordering::SeqCst);
+        let _ = app.emit_to(LABEL, "buddy-visible", show);
     }
-    let _ = app.emit_to(LABEL, "buddy-visible", show);
 }
 
 /// Bottom-right corner of the work area (above the taskbar) of the main window's monitor.
-fn place<R: Runtime>(app: &AppHandle<R>, buddy: &tauri::WebviewWindow<R>) {
+fn place<R: Runtime>(app: &AppHandle<R>, buddy: &tauri::WebviewWindow<R>) -> Option<()> {
     let main = app.get_webview_window("main");
     let monitor = main
         .and_then(|w| w.current_monitor().ok().flatten())
-        .or_else(|| buddy.primary_monitor().ok().flatten());
-    let (Some(monitor), Ok(size)) = (monitor, buddy.outer_size()) else { return };
+        .or_else(|| buddy.primary_monitor().ok().flatten())?;
+    let size = buddy
+        .outer_size()
+        .ok()?
+        .to_logical::<f64>(buddy.scale_factor().ok()?);
+    let size = size.to_physical::<i32>(monitor.scale_factor());
     let area = monitor.work_area();
     let margin = (MARGIN * monitor.scale_factor()) as i32;
-    let x = area.position.x + area.size.width as i32 - size.width as i32 - margin;
-    let y = area.position.y + area.size.height as i32 - size.height as i32;
-    let _ = buddy.set_position(PhysicalPosition::new(x, y));
+    let x = area.position.x + (area.size.width as i32 - size.width - margin).max(0);
+    let y = area.position.y + (area.size.height as i32 - size.height - margin).max(0);
+    buddy.set_position(PhysicalPosition::new(x, y)).ok()
 }
 
-/// Double-clicking the buddy brings the main window back (which hides the buddy again).
 #[tauri::command]
-pub fn show_main<R: Runtime>(app: AppHandle<R>) {
-    if let Some(main) = app.get_webview_window("main") {
-        let _ = main.unminimize();
-        let _ = main.show();
-        let _ = main.set_focus();
-    }
+pub fn show_main<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    let main = app
+        .get_webview_window("main")
+        .ok_or("Dashboard unavailable")?;
+    main.unminimize().map_err(|e| e.to_string())?;
+    main.show().map_err(|e| e.to_string())?;
+    main.set_focus().map_err(|e| e.to_string())?;
+    set_visible(&app, false);
+    Ok(())
 }

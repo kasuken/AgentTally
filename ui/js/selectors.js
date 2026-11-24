@@ -24,13 +24,22 @@ export function sortSessions(sessions, sort = "attention") {
 
 /**
  * Puts each sub-agent right after its parent (when the parent is in the list), deepest last,
- * keeping the given order otherwise. Returns `{ key, s, depth, kids: { total, working } }`.
+ * prioritizing a family by its first member in the supplied order. A blocked
+ * child thus brings its parent forward instead of disappearing below idle roots.
  */
 export function nestSubagents(list) {
-  const keys = new Set(list.map((s) => s.key));
-  const children = new Map();
+  const byKey = new Map(list.map((s) => [s.key, s]));
+  const placed = new Set(), ordered = [];
   for (const s of list) {
-    if (s.parent && keys.has(s.parent) && s.parent !== s.key) {
+    const branch = [];
+    for (let member = s; member && !placed.has(member.key); member = byKey.get(member.parent)) {
+      branch.push(member); placed.add(member.key);
+    }
+    ordered.push(...branch.reverse());
+  }
+  const children = new Map();
+  for (const s of ordered) {
+    if (s.parent && byKey.has(s.parent) && s.parent !== s.key) {
       if (!children.has(s.parent)) children.set(s.parent, []);
       children.get(s.parent).push(s);
     }
@@ -44,7 +53,21 @@ export function nestSubagents(list) {
     out.push({ key: s.key, s, depth, kids: { total: kids.length, working: kids.filter((k) => k.status === "working").length } });
     kids.forEach((k) => add(k, depth + 1));
   };
-  list.filter((s) => !(s.parent && keys.has(s.parent))).forEach((s) => add(s, 0));
-  list.forEach((s) => add(s, 1)); // anything left (e.g. a parent cycle)
+  ordered.filter((s) => !(s.parent && byKey.has(s.parent))).forEach((s) => add(s, 0));
+  ordered.forEach((s) => add(s, 1)); // anything left (e.g. a parent cycle)
   return out;
+}
+
+/** Stable identities keep a focused event button alive when another event arrives. */
+export function streamEvents(sessions, limit = 40) {
+  return sessions.flatMap((s) => {
+    const seen = new Map();
+    return s.events.flatMap((e) => {
+      if (e.kind === "system" || (e.kind === "think" && !e.text)) return [];
+      const id = JSON.stringify([s.key, e.ts, e.kind, e.tool]);
+      const occurrence = seen.get(id) || 0;
+      seen.set(id, occurrence + 1);
+      return [{ key: `${id}/${occurrence}`, s, e }];
+    });
+  }).sort((a, b) => b.e.ts - a.e.ts).slice(0, limit);
 }

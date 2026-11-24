@@ -154,6 +154,19 @@ impl Tracked {
                     }
                 }
             }
+            Format::VsCode if self.path.extension().is_some_and(|ext| ext == "json") => {
+                // Older VS Code builds rewrite the complete session, not a patch log.
+                if self.len <= MAX_DOC {
+                    if let Ok(file) = File::open(&self.path) {
+                        if let Ok(doc) = serde_json::from_reader::<_, Value>(BufReader::new(file.take(MAX_DOC + 1))) {
+                            if doc.get("requests").is_some_and(Value::is_array) {
+                                self.reset();
+                                vscode::apply(&mut self.session, &doc);
+                            }
+                        }
+                    }
+                }
+            }
             _ => self.read_lines(),
         }
     }
@@ -284,6 +297,33 @@ fn read_head_lines(path: &PathBuf, budget: u64) -> Vec<Vec<u8>> {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn vscode_whole_document_replaces_activity_and_preserves_last_valid_frame() {
+        let path = std::env::temp_dir().join(format!("agent-tally-chat-{}.json", std::process::id()));
+        let mut tracked = Tracked::new(Candidate {
+            path: path.clone(), format: Format::VsCode, provider: "vscode", id: "s".into(),
+            cwd: Some("sample".into()), parent: None, role: None, title: None, client: None, companions: vec![],
+        });
+        let doc = |title: &str| serde_json::json!({
+            "customTitle": title,
+            "requests": [{"timestamp": 1_800_000_000_000i64, "message":{"text":"Example"},
+                "response":[{"kind":"toolInvocation","toolCallId":"read1","toolId":"readFile"}]}]
+        });
+        for title in ["First", "Revised session"] {
+            let bytes = serde_json::to_vec_pretty(&doc(title)).unwrap();
+            fs::write(&path, &bytes).unwrap();
+            tracked.len = bytes.len() as u64;
+            tracked.refresh();
+            assert_eq!(tracked.session.title.as_deref(), Some(title));
+            assert_eq!(tracked.session.tool_calls, 1);
+        }
+        fs::write(&path, "{").unwrap();
+        tracked.len = 1;
+        tracked.refresh();
+        assert_eq!(tracked.session.title.as_deref(), Some("Revised session"));
+        fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn big_claude_log_keeps_project_root_from_head() {

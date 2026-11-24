@@ -1,10 +1,11 @@
 //! GitHub Copilot CLI: `~/.copilot/session-state/<session>/events.jsonl`.
 
 use crate::model::{Activity, Kind, Session};
-use crate::util::{clean_prompt, clip, path_str, s, summarize_args, ts_of, u64_at};
+use crate::util::{clean_prompt, clip, path_str, s, summarize_args, ts_of};
 use serde_json::Value;
 
 pub fn apply(sess: &mut Session, v: &Value) {
+    sess.observe_usage(super::Format::Copilot, v);
     let ts = ts_of(v.get("timestamp"));
     let d = v.get("data").unwrap_or(&Value::Null);
     match s(v, "type").unwrap_or("") {
@@ -51,10 +52,7 @@ pub fn apply(sess: &mut Session, v: &Value) {
                 sess.touch(ts);
             }
         }
-        "assistant.usage" => {
-            sess.tokens_in += u64_at(d, &["inputTokens"]);
-            sess.tokens_out += u64_at(d, &["outputTokens"]);
-        }
+        "assistant.usage" => {}
         "tool.execution_start" => {
             let name = s(d, "toolName").unwrap_or("tool");
             let args = d.get("arguments").cloned().unwrap_or(Value::Null);
@@ -67,7 +65,7 @@ pub fn apply(sess: &mut Session, v: &Value) {
             if text.is_empty() {
                 text = s(d, "toolTitle").map(|t| clip(t, 110)).unwrap_or_default();
             }
-            sess.push(Activity::tool(ts, name, text));
+            sess.push_tool_once(s(d, "toolCallId").or_else(|| s(v, "id")), Activity::tool(ts, name, text));
         }
         "tool.execution_complete" => {
             if d.get("success").and_then(Value::as_bool) == Some(false) {
@@ -78,7 +76,7 @@ pub fn apply(sess: &mut Session, v: &Value) {
         }
         "subagent.started" => {
             let name = s(d, "agentDisplayName").or_else(|| s(d, "agentName")).unwrap_or("sub-agent");
-            sess.push(Activity::tool(ts, "task", format!("Started {}", name)));
+            sess.push(Activity::new(ts, Kind::System, format!("Started {}", name)));
         }
         "permission.requested" => {
             sess.push(Activity::new(ts, Kind::Wait, "Waiting for your permission"));

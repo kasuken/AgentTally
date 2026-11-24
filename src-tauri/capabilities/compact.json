@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "compact",
+  "description": "Move the undecorated compact window by dragging or choosing another screen corner",
+  "windows": ["buddy"],
+  "permissions": ["core:window:allow-start-dragging", "core:window:allow-set-position"]
+}

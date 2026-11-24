@@ -2,276 +2,80 @@
 
 [![Latest release](https://img.shields.io/github/v/release/kasuken/AgentTally?label=download)](https://github.com/kasuken/AgentTally/releases/latest)
 [![CI](https://github.com/kasuken/AgentTally/actions/workflows/ci.yml/badge.svg)](https://github.com/kasuken/AgentTally/actions/workflows/ci.yml)
-![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-informational)
 
-See what the AI coding agents on your machine are doing, live: Claude Code, Codex, GitHub
-Copilot, Gemini CLI, Antigravity and more, side by side.
+See what the AI coding agents on your machine are doing **right now**. AgentTally groups sessions by project, shows the latest action for each agent, and brings permission requests and completed turns to the top. It reads local logs; you reply to agents and approve requests in their original applications.
 
-AgentTally has two interfaces over the same data, and you can switch between them at any time:
+![The Live activity dashboard with projects, session timelines, and a selected agent's latest action. Simulated data.](docs/screenshots/live-activity.png)
 
-- **Pixel** (default): a shared 32-bit-style pixel office. Each project has a desk bank, and each
-  session is a robot that moves between rooms as its work changes. Choose **Open space** to see
-  agents typing, or **Meeting** to see thinking and replying visualized around the conference table.
-- **Pro**: a calm workspace dashboard with one panel per project, one row per session and a
-  30-minute activity timeline.
+## Live activity
 
-![The office floor with project desks, meeting rooms and the team directory](docs/screenshots/office.png)
+- Find a session by project, agent, status, or search. Working sessions and sessions needing attention remain visible in the live view. Sub-agents appear beneath their parent.
+- Compare **30-minute timelines** on a common time axis. Each mark is a recent logged event, not a measure of how long an agent worked. Select a session for its model, project, branch, tool calls and timestamped activity.
+- Use the activity stream to follow changes across projects. A quiet session is different from a disconnected monitor: interrupted updates keep the last snapshot rather than substituting demo data.
+- Minimize the desktop app for a compact status window showing the session that most needs attention. Restore the dashboard from that window.
 
-[Open-space close-up: robots face their monitors at paired desks](docs/screenshots/office-desks.png)
+Updates follow the provider's log writes. The scanner polls tracked logs roughly every 1.2 seconds and looks for new sessions every five polls. A provider that writes only after a request finishes cannot report that request in flight.
 
-![The Pro interface: projects as panels with session timelines](docs/screenshots/pro.png)
+## Usage
 
-AgentTally only **reads** local log files. It never sends anything anywhere.
+Open **Usage** for **Today**, **7 days**, or **30 days** of local history. This view is separate from Live: changing the reporting period does not change which agents you see working. The background index reads available logs, so a new installation can recover recent history without waiting a month.
+
+Reported token counts, model and provider breakdowns, and tool calls describe what providers actually recorded. Estimated API-equivalent cost is **not your bill**. Estimated energy, emissions, and cooling water are **not direct measurements**. Missing counts, unsupported models, and incomplete history limit coverage; activity-only agents can still appear on Live. See the [usage methodology](docs/usage-methodology.md) for factors, rates, and limitations.
+
+AgentTally needs no account, telemetry, or remote pricing service. It does not modify provider logs. The usage index is a local SQLite database of accounting records, not a copy of conversations, tool arguments, or source code.
+
+![Seven days of example token usage with model pricing and footprint estimates. Simulated data.](docs/screenshots/ai-usage.png)
+
+## Supported live sources
+
+| Agent | Local source | What is visible |
+| --- | --- | --- |
+| Claude Code | `~/.claude/projects/*/*.jsonl`, including `subagents/` | Turns, tools, tokens, titles, sub-agents |
+| Codex CLI / desktop | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | Turns, tools, tokens, sub-agents |
+| GitHub Copilot CLI | `~/.copilot/session-state/*/events.jsonl` | Turns, tools, permission prompts, session names |
+| Copilot Chat | VS Code, Insiders, Cursor or VSCodium `User/workspaceStorage/*/chatSessions` | Prompts, tool invocations, titles |
+| Gemini CLI | `~/.gemini/tmp/*/chats/session-*.json` | Prompts, tools, tokens |
+| Antigravity | `~/.gemini/antigravity*/` | Project, title, run status and available conversation activity |
+| OpenCode | `~/.local/share/opencode/opencode.db*` or platform data folder | File activity only |
+
+`CLAUDE_CONFIG_DIR` and `CODEX_HOME` are respected. The live scanner tracks sessions touched in the last 24 hours. **Working** means a turn is open and logged recently (longer for an outstanding tool); **Needs approval** is a pending permission prompt; **Your turn** indicates a recently completed turn. Idle, sleeping, and offline are distinct from these states.
 
 ## Install
 
-Download the latest version from the [Releases page](https://github.com/kasuken/AgentTally/releases/latest).
+Download the latest packaged version from [Releases](https://github.com/kasuken/AgentTally/releases/latest). The live dashboard and local usage history are available starting with v0.5.0.
 
-| Platform | File |
-|---|---|
-| Windows 10/11 | `AgentTally_<version>_x64-setup.exe` (or the `.msi`) |
-| macOS, Apple Silicon | `AgentTally_<version>_aarch64.dmg` |
-| macOS, Intel | `AgentTally_<version>_x64.dmg` |
-| Linux | `AgentTally_<version>_amd64.AppImage`, `.deb` or `.rpm` |
+| Platform | Download |
+| --- | --- |
+| Windows 10/11 | x64 setup `.exe` or `.msi` |
+| macOS | `.dmg` for Apple Silicon (`aarch64`) or Intel (`x64`) |
+| Linux | `.AppImage`, `.deb`, or `.rpm` |
 
-The builds are not code-signed yet, so your OS will warn you the first time.
+Builds are not code-signed. On Windows, verify the download source before choosing **More info → Run anyway** in SmartScreen. On macOS, move the app to Applications; if Gatekeeper rejects the verified download, remove its quarantine flag with `xattr -dr com.apple.quarantine /Applications/AgentTally.app`. On Linux, make the AppImage executable with `chmod +x` before launching it.
 
-**Windows.** Run the `-setup.exe` installer. If SmartScreen says "Windows protected your PC",
-choose **More info → Run anyway**. The app uses the WebView2 runtime, which ships with Windows 11
-and is installed automatically on Windows 10 if missing.
+## Build and preview
 
-**macOS.** Open the `.dmg` and drag **AgentTally** into **Applications**. Because the app is not
-notarized, macOS may say it "is damaged" or "can't be opened". Remove the quarantine flag once:
+Install stable [Rust](https://rustup.rs), Node.js 18+, and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS.
 
-```bash
-xattr -dr com.apple.quarantine /Applications/AgentTally.app
+```sh
+npm ci
+npm run dev       # desktop app
+npm run build     # release binary and installers
+npm run preview   # browser preview: http://localhost:5178/?demo
 ```
 
-**Linux.** Either make the AppImage executable and run it:
+The browser demo uses synthetic data; the installed desktop app reads local logs. For a live snapshot from the command line, run `cargo run --manifest-path src-tauri/Cargo.toml -- --dump`. This output can include sensitive project and activity text.
 
-```bash
-chmod +x AgentTally_*_amd64.AppImage && ./AgentTally_*_amd64.AppImage
+```sh
+npm test
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-or install the package for your distribution:
-
-```bash
-sudo apt install ./AgentTally_*_amd64.deb        # Debian, Ubuntu
-sudo dnf install ./AgentTally-*.x86_64.rpm       # Fedora, RHEL
-```
-
-Then just start your agents as usual. Sessions appear as soon as they write to their logs.
-
-## The Pixel office
-
-Robots type at their project's desks when editing files, gather around the meeting table
-when thinking or replying, and visit the planning wall to organize tasks. Reading takes
-them to the library, commands to the server room, and web or MCP calls to the call booths.
-Meetings are a visual metaphor for session activity, not detected conversations between agents.
-
-When a robot needs permission it brings a form to the review desk. When its turn is done
-it raises a hand at its desk. Idle bots take breaks at the coffee counter or ping-pong
-table; sleeping bots settle in the lounge. Sub-agents appear as small drones.
-
-Use **Room views** to get closer to the desks, meeting, lounge or review queue. **Fit** or
-<kbd>F</kbd> returns to the whole floor. **Room guide** explains the artwork and status
-bubbles. The original islands and freight yard are still available with <kbd>Y</kbd>;
-your map choice is remembered.
-
-Turn on **Cinema** for occasional camera visits to working agents and approval requests.
-It returns to the overview between visits and stops when you take control of the camera.
-Cinema is unavailable when motion is paused or your system requests reduced motion.
-
-<img src="docs/screenshots/office-meeting.png" alt="Room close-up: robots at a meeting table in the Pixel office" width="720" />
-
-Each robot also has a colour and head for its agent: orange with a star antenna for Claude,
-white with a visor for Codex, purple or blue with goggles for Copilot, blue with a sparkle for
-Gemini, and a hovering cyan robot for Antigravity.
-
-## The Pro workspace
-
-Press **Pro view** in the top bar (or <kbd>U</kbd>) for a professional dashboard with the same
-data and the same controls:
-
-- One panel per project, showing its path and counts (approvals, your turn, working, sessions,
-  tool calls). Projects that need you come first.
-- One row per session: status, title, agent, current activity, and a chip for what it is doing
-  now (Think, Read, Edit, Run, Web, Plan, or its status when it is not working).
-- A **30-minute activity timeline** per session: each tick is one event, coloured by what the
-  agent was doing (the guide has the full legend). Next to it: the tool mix, tool count and when
-  the session was last seen.
-- Sub-agents are indented under their parent session.
-
-AgentTally remembers your choice of interface. The Pixel world is the default.
-
-## Desktop buddy
-
-Minimize AgentTally and its own robot, pink with a crown, stays on your desktop, above the
-taskbar and on top of other windows, without a window around it. Its thought cloud reports on
-all your agents at once: how many need your OK, have finished their turn, are working or idle,
-then one line per busy agent with its project and what it is doing right now (agents that need
-you first; a line flashes when its agent moves on).
-
-The robot acts out the overall picture: it waves and hops when anyone needs you, plays the tool
-animation of the agent that did something last while any are working, reads or relaxes on the
-beach when they are all idle, and shows `Zzz` when they are all asleep.
-
-- Drag the robot to move it. Click the cloud or double-click the robot to bring the main window
-  back.
-- Clicks on the empty space around the robot go through to the windows underneath.
-
-## Session details
-
-Select a robot, a workspace row, a session card or an activity entry to open its details: project
-path, branch, model, start time, token usage, tool calls and the recent activity with timestamps.
-In the Pixel world the camera flies to the robot; in Pro view the row is highlighted. Approvals
-and replies still happen in the original agent application; AgentTally tells you where to look.
-
-![Details of a session waiting for approval, Pro](docs/screenshots/pro-details.png)
-
-## Supported agents
-
-| Agent | Where it reads | Detail |
-|---|---|---|
-| Claude Code (CLI, desktop, IDE) | `~/.claude/projects/*/*.jsonl` (+ `subagents/`) | full: prompts, tools, tokens, titles, sub-agents |
-| Codex (CLI / desktop) | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | full: tools (incl. code-mode `exec`), tokens, sub-agents |
-| GitHub Copilot CLI | `~/.copilot/session-state/*/events.jsonl` | full: tools, permission prompts, session names |
-| GitHub Copilot Chat (VS Code, Insiders, Cursor, VSCodium) | `<config>/Code*/User/workspaceStorage/*/chatSessions/*.jsonl` | prompts, tool invocations, titles |
-| Gemini CLI | `~/.gemini/tmp/*/chats/session-*.json` | prompts, tools, tokens |
-| Antigravity (IDE and CLI) | `~/.gemini/antigravity*/conversation_summaries.db`, `conversations/`, `history.jsonl` | title, project, run status, sub-agents, prompts (CLI) |
-| OpenCode | `~/.local/share/opencode/opencode.db*` | activity only |
-
-`<config>` is `%APPDATA%` on Windows, `~/Library/Application Support` on macOS and `~/.config`
-on Linux. `CLAUDE_CONFIG_DIR` and `CODEX_HOME` are respected. Sessions touched in the last
-24 hours are tracked; the UI filters to LIVE / 1H / 6H / 24H. When several agents work in the
-same folder, they share one project.
-
-### How status is derived
-
-- **Working**: a turn is open and something was logged in the last 2 minutes (20 minutes if a
-  tool call is still running). For Antigravity: its run status is "running".
-- **Your turn**: the agent ended its turn (e.g. Claude `end_turn`, Codex `task_complete`,
-  Copilot's final `assistant.turn_end`, Antigravity "idle") less than 20 minutes ago.
-- **Needs approval**: a permission or approval request is pending (Copilot CLI, Codex).
-- **Idle / Sleeping**: quiet for 20 minutes / 3 hours. **Offline**: the session was shut down
-  or stopped.
-
-## Controls
-
-The top bar has the counters, the time window, the interface switch and the guide. The main
-window is the Pixel world or the Pro workspace, with the activity log below it and the session
-list on the right. **Needs you** comes first: permission requests, then completed turns.
-Click a counter or a status tab to filter. Counters always cover the selected time window and
-enabled sources; search, project, and status filters (in the session list) narrow the main
-window, the session list, and the activity log together.
-
-- Search by session title, project, path, provider, client, or model. <kbd>/</kbd> focuses search.
-- Filter by project or source (click a source chip to hide or show it). **Clear filters**
-  restores all sources and the 6-hour window.
-- Sessions default to **Needs you first**, with stable ordering within each status so they
-  do not jump around on every log update. Choose **Recently active** or **By project** as needed.
-- Details: copy the project path, or **Locate on map** / **Show in workspace**.
-- Pixel world: drag to pan, scroll to zoom around the pointer, or use the zoom buttons.
-  <kbd>F</kbd> fits the world. **Motion** pauses animation while data keeps updating.
-- Pro view: <kbd>F</kbd> scrolls the workspace back to the top.
-- <kbd>U</kbd> switches between Pixel and Pro, <kbd>Esc</kbd> closes details, <kbd>?</kbd> opens
-  the guide. Everything is keyboard accessible, and reduced-motion preferences are respected.
-- Time window, enabled sources, sorting, interface, and motion preferences are saved locally.
-
-The source badge distinguishes **DEMO**, **LIVE**, and **RECONNECTING**. Interrupted updates keep
-the last snapshot, show a warning, and retry automatically.
-
-Both interfaces adapt to smaller windows, down to a narrow side-by-side view and a phone-sized
-single column:
-
-<img src="docs/screenshots/office-compact.png" alt="The office floor on a small screen" width="390" />
-
-## Build from source
-
-Requirements: [Rust](https://rustup.rs) (stable), Node 18+, and the
-[Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS (WebView2 on Windows,
-Xcode command line tools on macOS, `webkit2gtk-4.1` and friends on Linux).
-
-```bash
-git clone https://github.com/kasuken/AgentTally.git
-cd AgentTally
-npm install
-npm run dev        # desktop app in development mode
-npm run build      # release build + installers in src-tauri/target/release/bundle
-```
-
-UI-only preview in a browser, without Tauri:
-
-```bash
-npm run preview    # http://localhost:5178/?demo  simulated agents
-                   # http://localhost:5178/?live  real logs via the debug binary (cargo build first)
-```
-
-Debug the log parsers without the UI:
-
-```bash
-cd src-tauri && cargo run -- --dump    # prints one snapshot as JSON
-```
-
-### Tests
-
-```bash
-npm test           # filters, ordering, map fit and zoom, workspace grouping and timelines
-cargo test --manifest-path src-tauri/Cargo.toml    # log parsers, status rules, scanner
-```
-
-For browser recovery checks without reading real agent logs, run
-`node tests/fixture-server.mjs <absolute-mode-file>` and open
-`http://localhost:5179/?live` (set `PORT` to use another port). Put `ready`, `error`, or
-`empty` in the mode file to exercise the corresponding snapshot state. This test fixture uses
-simulated sessions.
+To exercise browser recovery without reading real logs, run `node tests/fixture-server.mjs <absolute-mode-file>` and open `http://localhost:5179/?live`. Write `ready`, `empty`, or `error` to the mode file. For native debug builds, set `AGENT_TALLY_FIXTURE_ROOT` to an absolute folder containing synthetic provider directories (`.claude/projects`, `.codex/sessions`, `.copilot/session-state`, `Code/User`, `.gemini`, `opencode`). This selects only those sources and a separate local history database. Release builds do not use this override.
 
 ### Releasing
 
-1. Bump `version` in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`
-   (then run `npm install` and `cargo check` to update the lock files).
-2. Write the release notes in `.github/release-notes.md`.
-3. Push a version tag. GitHub Actions builds installers for Windows, Linux and macOS (Apple
-   Silicon and Intel) and publishes the release:
+Keep the version in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json` and their lockfiles in sync. Update `.github/release-notes.md`, then tag `vX.Y.Z`; GitHub Actions builds the installers for Windows, Linux and macOS.
 
-```bash
-git tag -a vX.Y.Z -m "AgentTally vX.Y.Z" && git push origin vX.Y.Z
-```
+### Design references
 
-## Project layout
-
-```
-src-tauri/src/
-  lib.rs            Tauri setup, background scan loop, `snapshot` command, "tally" event
-  buddy.rs          desktop buddy window: shown while the main window is minimized
-  scanner.rs        finds session files, tails them incrementally (2 MB replay on first sight;
-                    project root, first prompt and parent are read from the head)
-  model.rs          Session / Activity / Status, tool → station mapping
-  providers/        one parser per agent log format (Antigravity reads its SQLite summaries
-                    read-only via rusqlite)
-ui/
-  index.html        one page for both interfaces
-  buddy.html        desktop buddy (with buddy.css and js/buddy.js)
-  style.css         Pixel interface (default)
-  pro.css           Pro interface, loaded instead of style.css
-  js/main.js        data source, counters, session list, details, activity log, interface switch
-  js/world.js       shared camera, input, frame loop, and the original hex map
-  js/office.js      office layout, session destinations, walking routes and rendering (Pixel)
-  js/office-sprites.js  original pixel interiors, furniture and room guide artwork
-  js/board.js       project panels, session rows and activity timelines (Pro)
-  js/sprites.js     pixel art: robots, tiles, buildings, bubbles
-  js/selectors.js   time, project, provider, search, status, and sorting rules
-  js/demo.js        simulated data for ?demo
-docs/screenshots/   README images, taken from demo mode
-.github/workflows/  CI tests and the cross-platform release build
-```
-
-## Credits
-
-Inspired by pixel-agent visualizers such as
-[pixel-agents-standalone](https://github.com/rolandal/pixel-agents-standalone),
-[agent-move](https://github.com/ylascaux/agent-move),
-[agentroom](https://github.com/liuyixin-louis/agentroom) and
-[agent-factory](https://github.com/kalmigs/agent-factory).
-
-Fonts: Press Start 2P and VT323 (SIL Open Font License), bundled in `ui/fonts`.
+The usage reporting draws on [AI Engineering Fluency](https://github.com/rajbos/ai-engineering-fluency) for local token and model reporting and [CarbonBit](https://github.com/kasuken/vscode-carbonbit) for transparent environmental estimates. Neither tool is required to use AgentTally.

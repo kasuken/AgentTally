@@ -2,18 +2,16 @@
   "name": "agent-tally",
   "private": true,
   "type": "module",
-  "version": "0.4.0",
-  "description": "A living 32-bit-style pixel office for your local AI coding agents",
+  "version": "0.5.0",
+  "description": "A live activity and usage dashboard for local AI coding agents",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
-    "icon": "tauri icon assets/icon.png",
+    "icon": "tauri icon ui/icon.svg",
     "preview": "node scripts/serve.mjs",
     "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
-    "@fontsource/press-start-2p": "^5.3.0",
-    "@fontsource/vt323": "^5.3.0",
     "@tauri-apps/cli": "^2"
   }
 }

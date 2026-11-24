@@ -9,6 +9,7 @@ use serde_json::Value;
 use std::path::Path;
 
 pub fn apply(sess: &mut Session, v: &Value) {
+    sess.observe_usage(super::Format::VsCode, v);
     let body = v.get("v").unwrap_or(&Value::Null);
     let key: Vec<&str> = v
         .get("k")
@@ -137,7 +138,7 @@ fn response_part(sess: &mut Session, p: &Value) {
                 .or_else(|| p.get("invocationMessage"))
                 .map(|m| s(m, "value").or_else(|| m.as_str()).unwrap_or(""))
                 .unwrap_or("");
-            sess.push(Activity::tool(0, tool, clip(&strip_links(msg), 110)));
+            sess.push_tool_once(s(p, "toolCallId"), Activity::tool(0, tool, clip(&strip_links(msg), 110)));
         }
         Some("markdownContent") => {
             if let Some(t) = p.pointer("/content/value").and_then(Value::as_str) {

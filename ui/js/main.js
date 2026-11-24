@@ -1,434 +1,311 @@
-// Local-only dashboard controller. UI filters never change the underlying sessions.
-import { World } from "./world.js";
-import { Yard } from "./yard.js";
-import { Office, officeDuty } from "./office.js";
-import { drawRoomIcon } from "./office-sprites.js";
-import { Board } from "./board.js";
-import { robotSprite, droneSprite, drawBuilding } from "./sprites.js";
-import { crewSprite } from "./crew-art.js";
-import { providerMeta, STATUS, STATUS_TEXT, STATIONS, KIND_ICON, ago, compact, describe, escapeHtml as esc } from "./meta.js";
-import { createDemo } from "./demo.js";
-import { WINDOWS, selectSessions, sortSessions, nestSubagents, needsAttention, isResting, inWindow } from "./selectors.js";
+import { Board, projectKey } from "./board.js";
+import { providerMeta, STATUS_TEXT, describe, sessionAction, fileActivityOnly, escapeHtml as esc } from "./meta.js";
+import { WINDOWS, selectSessions, sortSessions, needsAttention, inWindow, streamEvents } from "./selectors.js";
 
 const $ = (id) => document.getElementById(id);
 const load = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
-const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Storage is optional. */ } };
-const motionPreference = matchMedia("(prefers-reduced-motion: reduce)");
-const storedWindow = load("tally.window", "6h");
-const storedHidden = load("tally.hidden", []);
-const storedSort = load("tally.sort", "attention");
+const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Preferences are optional. */ } };
+const params = new URLSearchParams(location.search);
+const tauri = window.__TAURI__;
+const demo = params.has("demo") || (!tauri && !params.has("live"));
+const returnKey = `tally.live-return.${demo ? "demo" : "local"}`;
+const staleMs = 12000;
+const windowPref = load("tally.window", "live");
+const sortPref = load("tally.sort", "attention");
+const hiddenPref = load("tally.hidden", []);
 const state = {
-  snap: null, visible: [], scope: [], window: Object.hasOwn(WINDOWS, storedWindow) ? storedWindow : "6h",
-  hidden: new Set(Array.isArray(storedHidden) ? storedHidden.filter((x) => typeof x === "string") : []),
-  status: "all", query: "", project: "", sort: ["attention", "recent", "project"].includes(storedSort) ? storedSort : "attention",
-  selected: null, received: 0, skew: 0, mode: "connecting", error: false,
-  paused: load("tally.paused", motionPreference.matches) === true,
+  snap: null, visible: [], received: 0, error: false, fixture: false,
+  window: Object.hasOwn(WINDOWS, windowPref) ? windowPref : "live",
+  sort: ["attention", "recent", "project"].includes(sortPref) ? sortPref : "attention",
+  hidden: new Set(Array.isArray(hiddenPref) ? hiddenPref.filter((x) => typeof x === "string") : []),
+  query: "", project: "", status: "all", selected: null, dismissed: false, opener: null,
 };
-const now = () => Date.now() - state.skew;
-// Both interfaces share one selection; whichever view reports it, the other follows.
-function onSelect(key) {
-  state.selected = key;
-  world.selected = key; world.dirty = true;
-  board.setSelected(key);
-  renderSide(); renderRoster();
-}
-const MAPS = {
-  office: { View: Office, name: "Office floor", code: "1F" },
-  world: { View: World, name: "Project islands", code: "HX" },
-  yard: { View: Yard, name: "Freight yard", code: "RY" },
-};
-const MAP_ORDER = Object.keys(MAPS);
-const mapParams = new URLSearchParams(location.search);
-let mapMode = mapParams.get("map") ?? (mapParams.has("yard") ? (mapParams.get("yard") === "0" ? "world" : "yard") : load("tally.map", "office"));
-if (!Object.hasOwn(MAPS, mapMode)) mapMode = "office";
-const world = new MAPS[mapMode].View($("world"), { onSelect, onCinemaStop: updateCinemaButton });
-$("floor-title").textContent = MAPS[mapMode].name;
-$("floor-number").textContent = MAPS[mapMode].code;
-$("world").setAttribute("aria-label", `${MAPS[mapMode].name}. Use the team directory to inspect agents with a keyboard.`);
-if (mapMode !== "office") {
-  $("station-guide").textContent = $("guide-title").textContent = "Map guide";
-  $("guide-intro").textContent = mapMode === "world" ? "Each project is an island. Robots travel between stations as agents read, edit and run commands." : "Each project is a depot. Trucks carry the activity of their sessions; small forklifts represent sub-agents.";
-}
-const board = new Board($("board"), { onSelect, now });
-// The pixel office and the Pro board share the same data and filters.
-const UIS = ["pixel", "pro"];
-let ui = document.documentElement.dataset.ui === "pro" ? "pro" : "pixel";
-const view = () => (ui === "pro" ? board : world);
-const statusLabel = (s) => STATUS_TEXT[s];
-const projectKey = (s) => s.cwd || s.project;
-const exactTime = (ts) => new Date(ts).toLocaleString();
-const time = (ts) => `<time data-ts="${ts}" title="${esc(exactTime(ts))}">${ago(now() - ts)}</time>`;
-const portraits = new Map();
-function avatar(s) {
-  const office = ui === "pixel" && mapMode === "office", drone = !!s.parent;
-  const key = [office, drone, s.provider, s.status].join(":");
-  if (!portraits.has(key)) {
-    const draw = office ? crewSprite : drone ? droneSprite : robotSprite;
-    portraits.set(key, draw({ provider: s.provider, legs: providerMeta(s.provider).hover ? "hover" : "stand",
-      arms: false, drone, rotor: 0, portrait: true, eyes: s.status === "offline" ? "off" : s.status === "sleeping" ? "closed" : "open",
-      chest: STATUS[s.status]?.color, gray: s.status === "offline" }).toDataURL());
+// A visit to Usage should not clear the current drill-down. Unlike durable
+// source/time preferences, this handoff lives only in the same tab and mode.
+try {
+  const previous = JSON.parse(sessionStorage.getItem(returnKey));
+  sessionStorage.removeItem(returnKey);
+  if (previous) {
+    for (const key of ["query", "project", "selected"]) if (typeof previous[key] === "string") state[key] = previous[key];
+    if (["all", "attention", "working", "resting"].includes(previous.status)) state.status = previous.status;
+    state.dismissed = previous.dismissed === true;
+    $("search").value = state.query;
   }
-  return portraits.get(key);
+} catch { /* Per-tab storage is optional. */ }
+const board = new Board($("board"), choose);
+const cache = new WeakMap();
+const clock = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+const exactTime = (ts) => new Date(ts).toLocaleString();
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const text = (el, value) => { if (el.textContent !== value) el.textContent = value; };
+const html = (el, markup) => {
+  if (cache.get(el) !== markup) { el.innerHTML = markup; cache.set(el, markup); }
+};
+const timestamp = (ts) => `<time datetime="${new Date(ts).toISOString()}" title="${esc(exactTime(ts))}">${esc(clock.format(ts))}</time>`;
+const now = () => state.snap ? state.snap.now + Math.max(0, Date.now() - state.received) : Date.now();
+const stale = () => state.error || (state.snap && (Date.now() - state.received > staleMs || Date.now() - state.snap.now > staleMs));
+const hasFilters = () => !!(state.query || state.project || state.hidden.size || state.status !== "all" || state.window !== "live");
+
+function choose(key, opener) {
+  state.selected = key;
+  state.dismissed = false;
+  state.opener = opener;
+  board.select(key);
+  renderDetail();
+  if (matchMedia("(max-width: 850px)").matches || opener?.closest("#activity-log")) {
+    $("detail-title").focus({ preventScroll: true });
+    $("detail").scrollIntoView({ block: "nearest" });
+  }
 }
-const subagentRole = (s) => (s.role && s.role !== "subagent" ? s.role : "sub-agent");
-function kidsLabel(kids) {
-  if (!kids?.total) return "";
-  const n = kids.working || kids.total;
-  return `${n} sub-agent${n === 1 ? "" : "s"}${kids.working ? " working" : ""}`;
+
+function closeDetail() {
+  if (!state.selected) return;
+  const key = state.selected;
+  state.selected = null;
+  state.dismissed = true;
+  board.select(null);
+  renderDetail();
+  if (state.opener?.isConnected) state.opener.focus();
+  else board.focus(key);
 }
-const markupCache = new WeakMap();
-function html(el, markup) { if (markupCache.get(el) !== markup) { el.innerHTML = markup; markupCache.set(el, markup); } }
-// Keep list buttons alive across polling, including keyboard focus and scroll position.
-function reconcile(el, rows, make) {
-  const existing = new Map([...el.children].map((node) => [node.dataset.row, node]));
-  const active = document.activeElement;
-  const scroll = el.scrollTop;
-  rows.forEach((row, i) => {
-    let node = existing.get(row.key);
-    if (!node) { node = document.createElement("li"); node.dataset.row = row.key; node.append(document.createElement("button")); }
-    existing.delete(row.key);
-    make(node.firstElementChild, row);
-    if (el.children[i] !== node) el.insertBefore(node, el.children[i] || null);
+
+function acceptSnapshot(snap) {
+  if (!snap || !Array.isArray(snap.sessions) || !Array.isArray(snap.providers) || !Number.isFinite(snap.now)) throw new Error("Invalid snapshot");
+  // A slow bootstrap invoke may finish after a newer push. Re-reading the same
+  // cached snapshot is not a heartbeat from the scanner.
+  if (!state.snap || snap.now > state.snap.now) {
+    state.snap = snap;
+    state.received = Date.now();
+  }
+  state.error = false;
+  refresh();
+}
+
+function renderConnection() {
+  const failed = stale();
+  const badge = $("source-badge");
+  const source = demo ? "Browser demo" : state.fixture ? "Fixture playback" : "Local scanner";
+  badge.dataset.mode = failed ? "error" : !state.snap ? "pending" : demo || state.fixture ? "sample" : "local";
+  text(badge, failed ? `${source} · interrupted` : !state.snap ? "Connecting" : source);
+  text($("source-note"), demo || state.fixture ? `${source}. Sample data only; no local logs connected.` : "Local activity only. No data leaves this machine.");
+  text($("updated"), state.snap ? `Snapshot at ${clock.format(state.snap.now)}${failed ? " · stale" : ""}` : "No snapshot yet");
+  $("connection-warning").hidden = !failed;
+  if (failed) text($("connection-warning"), state.snap ? "Updates interrupted. Showing the last snapshot while the connection recovers." :
+    `Scanner disconnected. Retrying automatically.${!tauri && !demo && !state.fixture ? " Browser live mode needs a running snapshot server." : ""}`);
+}
+
+function renderSummary() {
+  const sessions = state.visible;
+  const approvals = sessions.filter((s) => s.status === "blocked").length;
+  const replies = sessions.filter((s) => s.status === "waiting").length;
+  const counts = `${plural(sessions.length, "session")} across ${plural(new Set(sessions.map(projectKey)).size, "project")}.`;
+  const urgent = [
+    approvals && `${approvals} ${approvals === 1 ? "needs" : "need"} approval`,
+    replies && `${replies} ${replies === 1 ? "needs" : "need"} a reply`,
+  ].filter(Boolean).join("; ");
+  text($("overview-summary"), `${counts}${urgent ? ` ${urgent}.` : ""}`);
+  document.title = `${approvals + replies ? `(${approvals + replies}) ` : ""}Live activity · AgentTally`;
+}
+
+function renderFilters() {
+  $("window-filter").value = state.window;
+  $("sort").value = state.sort;
+  $("status-filter").value = state.status;
+  $("reset-filters").hidden = !hasFilters();
+  text($("sources-button"), state.hidden.size ? `Sources (${state.hidden.size} hidden)` : "Sources");
+  if (!state.snap) return;
+  const projects = new Map(state.snap.sessions.map((s) => [projectKey(s), s.project]));
+  if (state.project && !projects.has(state.project)) projects.set(state.project, state.project);
+  const counts = new Map();
+  for (const name of projects.values()) counts.set(name, (counts.get(name) || 0) + 1);
+  html($("project-filter"), '<option value="">All projects</option>' + [...projects].sort((a,b) => a[1].localeCompare(b[1]))
+    .map(([key,name]) => `<option value="${esc(key)}">${esc(counts.get(name) > 1 ? key : name)}</option>`).join(""));
+  $("project-filter").value = state.project;
+  const existing = new Map([...$("legend").children].map((b) => [b.dataset.p, b]));
+  const at = now();
+  for (const p of state.snap.providers) {
+    let b = existing.get(p.key);
+    existing.delete(p.key);
+    if (!b) { b = document.createElement("button"); b.type = "button"; b.dataset.p = p.key; $("legend").append(b); }
+    const count = state.snap.sessions.filter((s) => s.provider === p.key && inWindow(s, state.window, at)).length;
+    const on = !state.hidden.has(p.key);
+    b.disabled = !p.detected && !count && on;
+    b.setAttribute("aria-pressed", on);
+    b.title = b.disabled ? `${p.name} not detected` : `${on ? "Hide" : "Show"} ${p.name}`;
+    text(b, `${p.name} (${count})`);
+  }
+  for (const old of existing.values()) old.remove();
+}
+
+let detailKey = null;
+function renderDetail() {
+  const s = state.visible.find((v) => v.key === state.selected);
+  $("detail-body").hidden = $("close-detail").hidden = !s;
+  $("detail-placeholder").hidden = !!s;
+  if (!s) { detailKey = null; return; }
+  const scroll = detailKey === s.key ? $("detail-body").scrollTop : 0;
+  if (s.key !== detailKey) text($("copy-status"), "");
+  detailKey = s.key;
+  const provider = providerMeta(s.provider).name;
+  $("detail-status").className = `state ${s.status}`;
+  text($("detail-status"), STATUS_TEXT[s.status]);
+  text($("session-title"), s.title);
+  text($("current-action"), sessionAction(s));
+  $("attention-note").hidden = !needsAttention(s);
+  text($("attention-note"), s.status === "blocked" ? `Review the permission request in ${provider}.` : `Continue the conversation in ${provider}.`);
+  const parent = s.parent && state.snap.sessions.find((v) => v.key === s.parent);
+  const kids = state.snap.sessions.filter((v) => v.parent === s.key);
+  const tokens = (n, known) => Number.isFinite(n) && (known ?? n > 0) && !fileActivityOnly(s) ? n.toLocaleString() : "Not reported";
+  const facts = [
+    ["Project", s.cwd || s.project], s.branch && ["Branch", s.branch],
+    ["Agent", [provider, s.client].filter(Boolean).join(" · ")], ["Model", s.model || "Not reported"],
+    s.parent && ["Sub-agent", [s.role && s.role !== "subagent" ? s.role : null, parent ? `Child of ${parent.title}` : "Parent not in snapshot"].filter(Boolean).join(" · ")],
+    kids.length && ["Sub-agents", `${kids.length} total, ${kids.filter((v) => v.status === "working").length} working`],
+    ["Last seen", exactTime(s.lastTs)], s.started && ["Started", exactTime(s.started)],
+    ["Tool calls", fileActivityOnly(s) ? "Not reported" : s.toolCalls.toLocaleString()],
+    ["Input tokens", tokens(s.tokensIn, s.tokensInKnown)], ["Output tokens", tokens(s.tokensOut, s.tokensOutKnown)],
+    ["Coverage", fileActivityOnly(s) ? "File activity only" : "Recent local log records"],
+  ].filter(Boolean);
+  html($("facts"), facts.map(([k,v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join(""));
+  $("copy-path").disabled = !s.cwd;
+  const events = [...s.events].sort((a,b) => b.ts - a.ts);
+  html($("recent"), events.length ? events.map((e) => `<li>${timestamp(e.ts)}${esc(describe(e))}</li>`).join("") : `<li>${fileActivityOnly(s) ? "This source reports file changes, not detailed events." : "No detailed events were recorded."}</li>`);
+  $("detail-body").scrollTop = scroll;
+}
+
+function renderStream() {
+  const list = $("activity-log");
+  const rows = streamEvents(state.visible);
+  const existing = new Map([...list.children].map((node) => [node.dataset.row, node]));
+  const active = document.activeElement, scroll = list.scrollTop;
+  rows.forEach(({ key, s, e }, i) => {
+    let node = existing.get(key);
+    existing.delete(key);
+    if (!node) { node = document.createElement("li"); node.dataset.row = key; node.append(document.createElement("button")); }
+    const b = node.firstElementChild;
+    b.type = "button"; b.dataset.key = s.key;
+    b.setAttribute("aria-controls", "detail");
+    b.title = `${s.title}: ${describe(e)}`;
+    html(b, `${timestamp(e.ts)}<span class="who"><strong>${esc(providerMeta(s.provider).name)}</strong><small>${esc(s.project)}</small></span><span class="what">${esc(describe(e))}</span>`);
+    if (list.children[i] !== node) list.insertBefore(node, list.children[i] || null);
   });
   for (const node of existing.values()) node.remove();
-  markupCache.delete(el);
-  if (active?.isConnected && document.activeElement !== active) active.focus({ preventScroll: true });
-  el.scrollTop = scroll;
+  if (active?.isConnected && active !== document.activeElement) active.focus({ preventScroll: true });
+  list.scrollTop = scroll;
+  $("log-empty").hidden = !!rows.length;
 }
-function applySnapshot(snap) {
-  if (!snap || !Array.isArray(snap.sessions) || !Array.isArray(snap.providers) || !Number.isFinite(snap.now)) throw new Error("Invalid snapshot");
-  state.snap = snap; state.received = Date.now(); state.skew = state.received - snap.now; state.error = false;
-  refresh(); renderConnection();
+
+function renderEmpty() {
+  $("empty").hidden = !!state.visible.length;
+  if (state.visible.length) return;
+  const noData = !state.snap;
+  const filtered = !!state.snap?.sessions.length;
+  text($("empty-title"), noData ? stale() ? "Scanner unavailable" : "Connecting to the scanner" : filtered ? "No matching sessions" : "No sessions recorded");
+  text($("empty-message"), noData ? "Sessions will appear here after the first successful scan." : filtered ?
+    "Try a different time window, project, source or search." :
+    demo || state.fixture ? "This sample snapshot contains no sessions." : "Start a session in a supported agent. It will appear after its log is discovered.");
+  $("empty-reset").hidden = !filtered || !hasFilters();
 }
+
 function refresh() {
-  if (!state.snap) return;
-  state.scope = state.snap.sessions.filter((s) => !state.hidden.has(s.provider) && inWindow(s, state.window, now()));
-  state.visible = selectSessions(state.snap.sessions, state, now());
-  world.setSessions(state.visible);
-  board.setSessions(state.visible);
-  if (state.selected && !state.visible.some((s) => s.key === state.selected)) world.select(null);
-  renderCounters(); renderLegend(); renderProjects(); renderRoster(); renderSide(); renderLog(); renderFilters(); renderEmpty();
+  if (state.snap) {
+    const at = now();
+    state.visible = selectSessions(state.snap.sessions, state, at);
+    if (!state.visible.some((s) => s.key === state.selected)) {
+      state.selected = state.dismissed ? null : sortSessions(state.visible)[0]?.key || null;
+    }
+    board.render(state.visible, state.selected, state.sort, at);
+    renderSummary(); renderDetail(); renderStream();
+  }
+  renderFilters(); renderEmpty(); renderConnection();
 }
-function renderConnection() {
-  $("office-clock").textContent = new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
-  const stale = state.received && Date.now() - state.received > 12000;
-  const failed = state.error || stale;
-  const badge = $("source-badge");
-  badge.textContent = failed ? "RECONNECTING" : state.mode === "demo" ? "DEMO" : state.received ? "LIVE" : "CONNECTING";
-  badge.className = `source-badge ${failed ? "error" : state.mode === "demo" ? "demo" : ""}`;
-  $("subtitle").textContent = failed ? "Updates interrupted" : state.mode === "demo" ? "Simulated agents" : "Watching this machine";
-  $("connection-warning").hidden = !failed;
-  $("connection-warning").textContent = state.received ? "Live updates are interrupted. Showing the last snapshot; reconnecting automatically." : "Cannot read agent activity yet. Retrying automatically. For browser live preview, build the desktop debug binary first (cargo build in src-tauri).";
-  $("updated").textContent = state.received ? `${state.mode === "demo" ? "Simulation" : "Last scan"} · ${ago(Date.now() - state.received)}${failed ? " · data may be out of date" : ""}` : "Waiting for first scan";
+
+function resetFilters() {
+  state.query = state.project = ""; state.status = "all"; state.hidden.clear(); state.window = "live";
+  $("search").value = ""; save("tally.hidden", []); save("tally.window", state.window);
+  refresh(); $("search").focus();
 }
+$("sources-button").onclick = () => {
+  $("sources").hidden = !$("sources").hidden;
+  $("sources-button").setAttribute("aria-expanded", !$("sources").hidden);
+};
+$("legend").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (!b || b.disabled) return;
+  const key = b.dataset.p;
+  if (state.hidden.has(key)) state.hidden.delete(key); else state.hidden.add(key);
+  save("tally.hidden", [...state.hidden]); refresh();
+};
+$("search").oninput = (e) => { state.query = e.target.value; refresh(); };
+$("project-filter").onchange = (e) => { state.project = e.target.value; refresh(); };
+$("status-filter").onchange = (e) => { state.status = e.target.value; refresh(); };
+$("window-filter").onchange = (e) => { state.window = e.target.value; save("tally.window", state.window); refresh(); };
+$("sort").onchange = (e) => { state.sort = e.target.value; save("tally.sort", state.sort); refresh(); };
+$("reset-filters").onclick = $("empty-reset").onclick = resetFilters;
+$("activity-log").onclick = (e) => { const b = e.target.closest("button"); if (b) choose(b.dataset.key, b); };
+$("close-detail").onclick = closeDetail;
+$("focus-agent").onclick = () => board.focus(state.selected);
+$("copy-path").onclick = async () => {
+  const s = state.visible.find((v) => v.key === state.selected);
+  if (!s?.cwd) return;
+  let result = "Project path copied.";
+  try { await navigator.clipboard.writeText(s.cwd); } catch { result = "Clipboard unavailable. Select and copy the path above."; }
+  if (state.selected === s.key) text($("copy-status"), result);
+};
+$("help-button").onclick = () => $("help").showModal();
+$("close-help").onclick = () => $("help").close();
+addEventListener("keydown", (e) => {
+  if ($("help").open || e.ctrlKey || e.altKey || e.metaKey) return;
+  const typing = e.target.closest?.("input, textarea, select, [contenteditable=true]");
+  if (e.key === "Escape") { if (typing) e.target.blur(); else closeDetail(); return; }
+  if (typing) return;
+  if (e.key === "/") { e.preventDefault(); $("search").focus(); }
+  if (e.key.toLowerCase() === "f") board.focus();
+  if (e.key === "?") $("help").showModal();
+});
+
+const modeQuery = demo ? "?demo" : params.has("live") ? "?live" : "";
+$("usage-link").href = `usage.html${modeQuery}`;
+$("usage-link").addEventListener("click", (event) => {
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  const { query, project, status, selected, dismissed } = state;
+  try { sessionStorage.setItem(returnKey, JSON.stringify({ query, project, status, selected, dismissed })); } catch { /* Optional. */ }
+});
+document.querySelector('nav a[aria-current="page"]').href = `index.html${modeQuery}`;
+function failed() { state.error = true; renderEmpty(); renderConnection(); }
 async function start() {
-  const tauri = window.__TAURI__;
-  const params = new URLSearchParams(location.search);
-  if (params.has("demo") || (!tauri && !params.has("live"))) {
-    state.mode = "demo";
-    const sim = createDemo(); applySnapshot(sim.tick());
-    setInterval(() => applySnapshot(sim.tick()), 1200);
+  refresh();
+  if (demo) {
+    const { createDemo } = await import("./demo.js");
+    const sim = createDemo();
+    acceptSnapshot(sim.tick());
+    setInterval(() => acceptSnapshot(sim.tick()), 1200);
     return;
   }
-  state.mode = "live";
-  // Sequential polling prevents slow scans from overlapping or arriving out of order.
   let listening = false;
-  const pull = async () => {
+  const started = Date.now();
+  async function pull() {
     try {
       if (tauri) {
-        if (!listening) { await tauri.event.listen("tally", (e) => { try { applySnapshot(e.payload); } catch { state.error = true; renderConnection(); } }); listening = true; }
+        if (!listening) {
+          await tauri.event.listen("tally", ({ payload }) => { try { acceptSnapshot(payload); } catch { failed(); } });
+          listening = true;
+        }
         if (!state.received || Date.now() - state.received > 5000) {
-          const first = await tauri.core.invoke("snapshot");
-          if (first) applySnapshot(first);
-          else if (Date.now() - startedAt > 12000) throw new Error("No snapshot");
+          const snap = await tauri.core.invoke("snapshot");
+          if (snap) acceptSnapshot(snap);
+          else if (Date.now() - started > staleMs) failed();
         }
       } else {
         const response = await fetch("/api/snapshot", { cache: "no-store", signal: AbortSignal.timeout(10000) });
+        state.fixture = response.headers.get("X-AgentTally-Fixture") === "1";
         if (!response.ok) throw new Error("Scan failed");
-        applySnapshot(await response.json());
+        acceptSnapshot(await response.json());
       }
-    } catch { state.error = true; renderConnection(); }
-    setTimeout(pull, 2500);
-  };
-  const startedAt = Date.now();
+    } catch { failed(); }
+    setTimeout(pull, tauri ? 2500 : 1200);
+  }
+  setInterval(() => { if (!state.received || Date.now() - state.received > 5000) refresh(); }, 5000);
   await pull();
 }
-function renderCounters() {
-  const v = state.scope;
-  const approval = v.filter((s) => s.status === "blocked").length;
-  const ready = v.filter((s) => s.status === "waiting").length;
-  const projects = new Set(v.map(projectKey)).size;
-  $("overview-summary").textContent = `${v.length} sessions across ${projects} project${projects === 1 ? "" : "s"}`;
-  const items = [
-    ["attention", "Needs you", approval + ready, "var(--gold)", `${approval} approval${approval === 1 ? "" : "s"} · ${ready} your turn`],
-    ["working", "Working", v.filter((s) => s.status === "working").length, "var(--green)", "Agents on a task"],
-    ["resting", "At rest", v.filter(isResting).length, "#96b8dc", "Idle, sleeping or offline"],
-    ["all", "All sessions", v.length, "var(--ink)", `${projects} projects in view`],
-  ];
-  for (const [key, label, n, color, hint] of items) {
-    let b = $("counters").querySelector(`[data-status="${key}"]`);
-    if (!b) { b = document.createElement("button"); b.dataset.status = key; $("counters").append(b); }
-    b.className = `counter ${key} ${state.status === key ? "on" : ""}`;
-    b.setAttribute("aria-pressed", state.status === key);
-    b.title = `${label} in the selected time window and sources. Click to filter.`;
-    html(b, `<span class="counter-top"><span class="dot" style="color:${color}"></span>${label}</span><span class="arrow" aria-hidden="true">↗</span><b style="color:${color}">${n}</b><small>${hint}</small>`);
-  }
-  // Read-only totals next to the filter counters, as in a game HUD.
-  const stats = [["tools", "Tool calls", compact(v.reduce((a, s) => a + s.toolCalls, 0)), "#ffffff"], ["tokens", "Tokens", compact(v.reduce((a, s) => a + s.tokensIn + s.tokensOut, 0)), "#c7a8ff"]];
-  for (const [key, label, n, color] of stats) {
-    let d = $("counters").querySelector(`[data-stat="${key}"]`);
-    if (!d) { d = document.createElement("div"); d.dataset.stat = key; d.className = "counter stat"; $("counters").append(d); }
-    d.title = `${label} across sessions in the selected time window and sources`;
-    html(d, `<b style="color:${color}">${n}</b><span class="counter-top">${label}</span>`);
-  }
-  document.title = `${approval + ready ? `(${approval + ready}) ` : ""}AgentTally`;
-}
-function renderLegend() {
-  for (const p of state.snap.providers) {
-    let chip = [...$("legend").children].find((b) => b.dataset.p === p.key);
-    if (!chip) { chip = document.createElement("button"); chip.dataset.p = p.key; $("legend").append(chip); }
-    const enabled = !state.hidden.has(p.key);
-    const count = state.snap.sessions.filter((s) => s.provider === p.key && inWindow(s, state.window, now())).length;
-    chip.className = `chip ${enabled ? "" : "off"}`;
-    chip.disabled = !p.detected && !count;
-    chip.setAttribute("aria-pressed", enabled);
-    chip.title = chip.disabled ? `${p.name} not detected` : `${enabled ? "Hide" : "Show"} ${p.name}`;
-    html(chip, `<i style="background:${providerMeta(p.key).body}"></i>${esc(p.name)} <em>${count}</em>`);
-  }
-}
-function renderProjects() {
-  const projects = new Map(state.snap.sessions.map((s) => [projectKey(s), s.project]));
-  const counts = new Map(); for (const name of projects.values()) counts.set(name, (counts.get(name) || 0) + 1);
-  // Retain an explicit selection if its session ages out, until the user clears it.
-  if (state.project && !projects.has(state.project)) projects.set(state.project, state.project);
-  const markup = '<option value="">All projects</option>' + [...projects].sort((a,b) => a[1].localeCompare(b[1])).map(([key,name]) => `<option value="${esc(key)}">${esc(counts.get(name) > 1 ? key : name)}</option>`).join("");
-  html($("project-filter"), markup); $("project-filter").value = state.project;
-}
-function renderRoster() {
-  const rows = nestSubagents(sortSessions(state.visible, state.sort));
-  $("party-count").textContent = `${rows.length}`;
-  reconcile($("roster"), rows, (b, { s, depth, kids }) => {
-    const m = providerMeta(s.provider), st = STATUS[s.status];
-    b.dataset.key = s.key;
-    b.style.setProperty("--crew-color", m.body);
-    b.className = `card ${s.status}${depth ? " child" : ""}${kids.working ? " has-busy-kids" : ""} ${s.key === state.selected ? "sel" : ""}`;
-    b.setAttribute("aria-pressed", s.key === state.selected);
-    b.title = `${depth ? "Sub-agent: " : ""}${s.title} · ${s.cwd || s.project}`;
-    const tag = depth
-      ? `<span class="tag sub" style="--c:${m.body}">SUB-AGENT</span>`
-      : `<span class="tag" style="background:${m.body}">${esc(m.short)}</span>`;
-    const where = depth ? subagentRole(s) : s.project;
-    const room = mapMode === "office" && ui === "pixel" && !s.parent ? `<span class="room-location">${esc(officeDuty(s).label)}</span>` : "";
-    const subs = kids.total ? `<span class="subs${kids.working ? " busy" : ""}">${kidsLabel(kids)}</span>` : "";
-    html(b, `<img src="${avatar(s)}" alt="" /><span class="name">${tag}<b>${esc(s.title)}</b></span><span class="meta"><span class="project">${esc(where)}</span>${time(s.lastTs)}</span><span class="doing">${esc(describe(s.current))}</span><span class="status-line" style="color:${st.color}"><span class="dot"></span>${statusLabel(s.status)}${room}${subs}<span class="provider-name">${esc(m.name)}</span></span>`);
-  });
-  if (!rows.length) html($("roster"), '<li class="list-empty">No matching sessions.<br>Try another filter or clear your search.</li>');
-}
-const parentOf = (s) => s.parent && state.visible.find((x) => x.key === s.parent);
-const childrenOf = (s) => state.visible.filter((x) => x.parent === s.key);
-let detailKey = null;
-let detailEvents = "";
-function renderSide() {
-  const el = $("detail");
-  const s = state.visible.find((x) => x.key === state.selected);
-  if (!s) { el.hidden = true; detailKey = null; return; }
-  const changed = detailKey !== s.key;
-  const scroll = changed ? 0 : el.scrollTop;
-  detailKey = s.key;
-  el.hidden = false;
-  // Stable controls: only update the content slots, never the detail action buttons.
-  if (!el.firstElementChild) el.innerHTML = '<header><img alt="" /><div><h2></h2><span class="pill"></span></div><button class="btn close" id="close-detail" aria-label="Close session details" title="Close (Esc)">✕</button></header><p class="attention-note" hidden></p><dl class="facts"></dl><div class="detail-actions"><button class="btn" id="focus-agent">⌖ Locate on map</button><button class="btn" id="copy-path">Copy project path</button></div><p id="copy-status" class="muted" role="status"></p><div class="stats"></div><h3>Recent activity</h3><ol class="quest"></ol>';
-  el.querySelector("header img").src = avatar(s);
-  el.querySelector("h2").textContent = s.title;
-  $("focus-agent").textContent = ui === "pro" ? "Show in workspace" : "⌖ Locate on map";
-  const pill = el.querySelector(".pill"); pill.style.color = STATUS[s.status].color; pill.textContent = statusLabel(s.status);
-  const note = el.querySelector(".attention-note"); note.hidden = !needsAttention(s); note.className = `attention-note ${s.status}`;
-  note.textContent = s.status === "blocked" ? `Permission requested. Review it in ${providerMeta(s.provider).name}.` : `Turn finished. Continue the conversation in ${providerMeta(s.provider).name}.`;
-  const facts = [["Agent", `${providerMeta(s.provider).name}${s.client ? ` · ${s.client}` : ""}`], ["Project", s.cwd || s.project], s.branch && ["Branch",s.branch], s.model && ["Model",s.model], s.parent && ["Role", `Sub-agent (${subagentRole(s)})${parentOf(s) ? ` of “${parentOf(s).title}”` : ""}`], childrenOf(s).length && ["Sub-agents", kidsLabel({ total: childrenOf(s).length, working: childrenOf(s).filter((k) => k.status === "working").length }) + ` · ${childrenOf(s).length} total`], ["Started", s.started ? exactTime(s.started) : "Unknown"], ["Last seen",exactTime(s.lastTs)], ["Coverage", s.provider === "opencode" ? "File activity only" : "Parsed local logs"]].filter(Boolean);
-  html(el.querySelector(".facts"), facts.map(([k,v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join(""));
-  html(el.querySelector(".stats"), `<span><b>${compact(s.toolCalls)}</b> tool calls</span><span><b>${compact(s.tokensIn)}</b> tokens in</span><span><b>${compact(s.tokensOut)}</b> tokens out</span>`);
-  const events = [...s.events].reverse();
-  const signature = JSON.stringify(events);
-  if (changed || detailEvents !== signature) {
-    html(el.querySelector(".quest"), events.length ? events.map((e) => `<li class="k-${esc(e.kind)}"><span>${KIND_ICON[e.kind] || "·"}</span><span class="tx">${esc(describe(e))}</span>${time(e.ts)}</li>`).join("") : '<li class="list-empty">No detailed events available.</li>');
-    detailEvents = signature;
-  }
-  $("copy-path").disabled = !s.cwd;
-  if (changed) $("copy-status").textContent = "";
-  el.scrollTop = scroll;
-}
-function renderLog() {
-  const rows = state.visible.flatMap((s) => {
-    const occurrences = new Map();
-    return s.events.map((e) => {
-      const identity = JSON.stringify([s.key, e.ts, e.kind, e.tool]);
-      const occurrence = occurrences.get(identity) || 0;
-      occurrences.set(identity, occurrence + 1);
-      return { key: `${identity}/${occurrence}`, s, e };
-    });
-  })
-    .filter(({e}) => e.kind !== "system" && !(e.kind === "think" && !e.text)).sort((a,b) => b.e.ts-a.e.ts).slice(0,40);
-  reconcile($("world-log"), rows, (b,{s,e}) => {
-    b.dataset.key = s.key;
-    b.title = `${s.title}: ${describe(e)}`;
-    html(b, `${time(e.ts)}<span class="who" style="color:${providerMeta(s.provider).body}"><span class="who-agent">${esc(providerMeta(s.provider).short)}</span><span class="who-at">@</span><span class="who-project">${esc(s.project)}</span></span><span class="what">${e.kind === "tool" ? STATIONS[e.station]?.icon || "⚙" : KIND_ICON[e.kind] || "·"} ${esc(describe(e))}</span>`);
-  });
-  if (!rows.length) html($("world-log"), '<li class="list-empty">Activity will appear here as your agents work.</li>');
-}
-function renderFilters() {
-  for (const b of document.querySelectorAll("[data-status]")) { b.classList.toggle("on", b.dataset.status === state.status); b.setAttribute("aria-pressed", b.dataset.status === state.status); }
-  for (const b of $("window-filter").children) { b.classList.toggle("on", b.dataset.w === state.window); b.setAttribute("aria-pressed", b.dataset.w === state.window); }
-  $("reset-filters").hidden = !hasFilters();
-  const projects = new Set(state.visible.map(projectKey)).size;
-  $("world-count").textContent = `${projects} project${projects === 1 ? "" : "s"} · ${state.visible.length} agent${state.visible.length === 1 ? "" : "s"} in view`;
-  for (const b of $("room-rail").querySelectorAll("button")) b.disabled = !projects;
-}
-function hasFilters() { return !!(state.query || state.project || state.hidden.size || state.status !== "all" || state.window !== "6h"); }
-function renderEmpty() {
-  $("empty").hidden = state.visible.length > 0;
-  const filtered = hasFilters();
-  $("empty-title").textContent = filtered ? "No matching agents" : "All quiet here";
-  $("empty-message").textContent = filtered ? "Try a wider time window, another project, or reset your filters." : "Start a session in Claude Code, Codex, Copilot or Gemini. Your agents will appear here automatically.";
-  $("empty-reset").hidden = !filtered;
-}
-function filterRefresh() { refresh(); if (ui === "pixel") world.recenter(); }
-function resetFilters() {
-  state.query = ""; state.project = ""; state.status = "all"; state.hidden.clear(); state.window = "6h";
-  $("search").value = ""; save("tally.hidden", []); save("tally.window", state.window); filterRefresh();
-}
-function choose(key) { world.select(key); view().focus(key); }
-for (const id of ["roster", "world-log"]) $(id).addEventListener("click", (e) => { const key = e.target.closest("button")?.dataset.key; if (key) choose(key); });
-for (const id of ["counters", "status-filter"]) $(id).addEventListener("click", (e) => { const value = e.target.closest("button")?.dataset.status; if (value) { state.status = value; filterRefresh(); } });
-$("window-filter").addEventListener("click", (e) => { const w = e.target.closest("button")?.dataset.w; if (w) { state.window = w; save("tally.window",w); filterRefresh(); } });
-$("legend").addEventListener("click", (e) => { const chip = e.target.closest("button"); if (!chip || chip.disabled) return; const p = chip.dataset.p; state.hidden.has(p) ? state.hidden.delete(p) : state.hidden.add(p); save("tally.hidden",[...state.hidden]); filterRefresh(); });
-$("search").addEventListener("input", (e) => { state.query = e.target.value; filterRefresh(); });
-$("project-filter").addEventListener("change", (e) => { state.project = e.target.value; filterRefresh(); });
-$("sort").value = state.sort;
-$("sort").addEventListener("change", (e) => { state.sort = e.target.value; save("tally.sort",state.sort); renderRoster(); });
-$("reset-filters").onclick = resetFilters; $("empty-reset").onclick = resetFilters;
-$("recenter").onclick = () => world.recenter();
-$("zoom-in").onclick = () => world.zoom(1); $("zoom-out").onclick = () => world.zoom(-1);
-function applyUi(next) {
-  world.stopCinema();
-  ui = UIS.includes(next) ? next : "pixel";
-  document.documentElement.dataset.ui = ui;
-  $("theme-pixel").disabled = ui !== "pixel";
-  $("theme-pro").disabled = ui !== "pro";
-  // Headings with a data-pro attribute use the plainer wording in the pro interface.
-  for (const el of document.querySelectorAll("[data-pro]")) {
-    el.dataset.pixel ??= el.textContent;
-    el.textContent = ui === "pro" ? el.dataset.pro : el.dataset.pixel;
-  }
-  const other = ui === "pro" ? "Pixel" : "Pro";
-  $("ui-toggle").querySelector(".ui-long").textContent = `${other} view`;
-  $("ui-toggle").querySelector(".ui-short").textContent = other;
-  $("ui-toggle").setAttribute("aria-label", `Switch to the ${other.toLowerCase()} interface`);
-  board.setActive(ui === "pro");
-  if (ui === "pixel") { world.dirty = true; world.recenter(); }
-  if (state.selected) view().focus(state.selected);
-  renderSide(); renderRoster();
-}
-$("ui-toggle").onclick = () => { applyUi(ui === "pro" ? "pixel" : "pro"); save("tally.ui", ui); };
-function setMotion(paused) {
-  state.paused = paused; world.setPaused(paused); document.body.classList.toggle("motion-paused",paused);
-  $("motion").setAttribute("aria-pressed",paused); $("motion").innerHTML = paused ? '▶ <span>Motion</span>' : 'Ⅱ <span>Motion</span>';
-  $("motion").title = paused ? "Resume animation; live data is still updating" : "Pause animation; live data keeps updating";
-  $("motion").setAttribute("aria-label", paused ? "Resume animation" : "Pause animation");
-  updateCinemaButton();
-}
-$("motion").onclick = () => { setMotion(!state.paused); save("tally.paused",state.paused); };
-function updateCinemaButton() {
-  const button = $("cinema");
-  const enabled = !!world.cinema;
-  button.setAttribute("aria-pressed", enabled);
-  button.disabled = state.paused || motionPreference.matches;
-  button.title = motionPreference.matches ? "Cinematic camera is unavailable with reduced motion" :
-    state.paused ? "Resume motion to use the cinematic camera" :
-    enabled ? "Stop cinematic camera" : "Start cinematic camera";
-}
-$("cinema").onclick = () => {
-  if (world.cinema) world.stopCinema();
-  else { world.recenter(); world.startCinema(); updateCinemaButton(); }
-};
-motionPreference.addEventListener("change", (e) => { if (e.matches) setMotion(true); else updateCinemaButton(); });
-document.addEventListener("visibilitychange", () => { if (document.hidden) world.stopCinema(); });
-$("detail").addEventListener("click", async (e) => {
-  const id = e.target.closest("button")?.id;
-  if (id === "close-detail") { const key = state.selected; world.select(null); [...$("roster").querySelectorAll("button")].find((b) => b.dataset.key === key)?.focus({preventScroll:true}); }
-  if (id === "focus-agent") view().focus(state.selected);
-  if (id === "copy-path") {
-    const session = state.visible.find((s) => s.key === state.selected);
-    if (!session?.cwd) return;
-    try { await navigator.clipboard.writeText(session.cwd); if (state.selected === session.key) $("copy-status").textContent = "Project path copied."; }
-    catch { if (state.selected === session.key) $("copy-status").textContent = "Clipboard unavailable. Select and copy the project path above."; }
-  }
-});
-$("help-button").onclick = () => $("help").showModal(); $("close-help").onclick = () => $("help").close();
-$("station-guide").onclick = () => $("help").showModal();
-// Use the actual map artwork in the guide so every silhouette has a clear meaning.
-const officeGuide = [
-  ["meeting","Meeting room","Thinking or replying"], ["desk","Team desks","Writing code"], ["library","Library","Reading code"],
-  ["terminal","Server room","Running commands"], ["radar","Call booths","Web and MCP tools"], ["tasks","Planning wall","Plans and delegation"],
-  ["queue","Review desk","Needs approval"], ["break","Lounge","Taking a break"],
-];
-if (mapMode === "office") {
-  const rail = $("room-rail");
-  for (const [room,name] of [["desk","Open space"],["meeting","Meeting"],["break","Lounge"],["queue","Review desk"]]) {
-    const button = document.createElement("button");
-    button.className = "room-jump";
-    button.setAttribute("aria-label", `Zoom to ${name.toLowerCase()}`);
-    const icon = document.createElement("canvas");
-    paintRoomIcon(icon, room);
-    button.append(icon, document.createTextNode(name));
-    button.onclick = () => world.visit(room);
-    rail.append(button);
-  }
-  rail.hidden = false;
-}
-const guide = mapMode === "office" ? officeGuide : Object.entries(STATIONS).map(([k,v]) => [k,v.label,v.verb]);
-function paintRoomIcon(canvas, room) {
-  canvas.width = 88; canvas.height = 96;
-  canvas.setAttribute("aria-hidden", "true");
-  const g = canvas.getContext("2d"); g.scale(2, 2);
-  drawRoomIcon(g, room);
-}
-for (const [station, name, verb] of guide) {
-  const card = document.createElement("div");
-  card.className = "station-card";
-  const canvas = document.createElement("canvas");
-  canvas.width = 44; canvas.height = 48;
-  canvas.setAttribute("aria-hidden", "true");
-  if (mapMode === "office") paintRoomIcon(canvas, station);
-  else drawBuilding(canvas.getContext("2d"), station, 22, 38, 0, false, "#59f3ff");
-  const label = document.createElement("strong"); label.textContent = name;
-  const activity = document.createElement("span"); activity.textContent = verb;
-  card.append(canvas, label, activity);
-  $("station-atlas").append(card);
-}
-addEventListener("keydown", (e) => {
-  if ($("help").open || e.ctrlKey || e.metaKey || e.altKey) return;
-  const typing = e.target.closest("input, textarea, select, [contenteditable=true]");
-  if (e.key === "Escape") { if (typing) { e.target.blur(); return; } $("close-detail")?.click(); }
-  if (typing) return;
-  if (e.key === "/") { e.preventDefault(); $("search").focus(); }
-  if (e.key.toLowerCase() === "f") view().recenter();
-  if (e.key.toLowerCase() === "u") $("ui-toggle").click();
-  if (e.key.toLowerCase() === "y" && ui === "pixel") {
-    save("tally.map", MAP_ORDER[(MAP_ORDER.indexOf(mapMode) + 1) % MAP_ORDER.length]);
-    const url = new URL(location.href); url.searchParams.delete("yard"); url.searchParams.delete("map");
-    location.replace(url);
-  }
-  if (e.key === "?") $("help").showModal();
-});
-setInterval(() => {
-  renderConnection();
-  if (state.snap) {
-    // Filtering uses elapsed time, not the timestamp of a stale snapshot.
-    refresh();
-    document.querySelectorAll("time[data-ts]").forEach((el) => { el.textContent = ago(now() - Number(el.dataset.ts)); });
-  }
-}, 5000);
-$("logo-bot").getContext("2d").drawImage(crewSprite({provider:"tally",chest:"#a0e4b5"}),0,0);
-// Canvas text never triggers @font-face loading; request the pixel font explicitly and redraw once it arrives.
-document.fonts.load('10px "Press Start 2P"').then(() => { world.dirty = true; }).catch(() => {});
-setMotion(state.paused); applyUi(ui); renderFilters(); start();
+start().catch(failed);

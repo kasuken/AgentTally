@@ -92,17 +92,6 @@ pub fn path_str<'a>(v: &'a Value, path: &[&str]) -> Option<&'a str> {
     cur.as_str()
 }
 
-pub fn u64_at(v: &Value, path: &[&str]) -> u64 {
-    let mut cur = v;
-    for p in path {
-        match cur.get(*p) {
-            Some(n) => cur = n,
-            None => return 0,
-        }
-    }
-    cur.as_u64().unwrap_or(0)
-}
-
 /// Collapses whitespace and cuts to `max` characters with an ellipsis.
 pub fn clip(text: &str, max: usize) -> String {
     let mut out = String::with_capacity(max.min(text.len()));

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI usage - AgentTally</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="stylesheet" href="shell.css">
+  <link rel="stylesheet" href="usage.css">
+  <script type="module" src="js/usage.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to usage</a>
+  <header class="top"><div class="bar"><div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>AgentTally</div><nav aria-label="Workspace views"><a href="index.html">Live activity</a><a href="usage.html" aria-current="page">Usage</a></nav><span class="source-badge" id="source-badge" data-mode="local">Local history</span></div></header>
+  <main id="main">
+    <div class="intro"><div><h1>AI usage</h1><p>Reported usage from retained local logs. Estimates, not bills or measurements.</p></div><div class="periods" role="group" aria-label="Usage period"><button data-days="1" aria-pressed="true">Today</button><button data-days="7" aria-pressed="false">7 days</button><button data-days="30" aria-pressed="false">30 days</button></div></div>
+    <p id="status" role="status">Connecting to local history...</p>
+    <p id="error" role="alert" hidden></p>
+    <div class="layout">
+      <section class="surface" aria-labelledby="tokens-title"><header><h2 id="tokens-title">Reported tokens</h2><span id="dates" class="sub"></span></header><div class="body">
+        <p id="total" class="total">Unavailable</p><p id="token-coverage" class="sub"></p>
+        <figure><div id="trend" class="trend" role="img" aria-label="No reported daily usage"></div><div class="date-axis" aria-hidden="true"><span id="first-date"></span><span id="last-date"></span></div><figcaption id="trend-caption">Daily totals by local date</figcaption></figure>
+        <dl id="classes"></dl>
+      </div></section>
+      <section class="surface" aria-labelledby="impact-title"><header><h2 id="impact-title">Estimated impact</h2><span class="tag">Low confidence</span></header><div class="body"><dl id="estimates"></dl><p id="estimate-coverage" class="sub"></p><p class="sub">Standard API-equivalent USD, not subscription charges. Environmental factors use a global average, not your data center.</p><details><summary>Methodology and import details</summary><p id="versions"></p><p>Medium anchor: 0.00015 Wh/input token, 0.0006 Wh/output token; cache reads weighted 0.1. Small models use 0.25x, frontier models 3x. Carbon: 480 g CO2e/kWh. On-site cooling: 1.1 L/kWh.</p><p>Unknown models have no price estimate; footprint uses a disclosed generic medium factor. Missing counts are excluded, never inferred from text. Training, hardware, local device use and electricity-generation water are excluded. Claude cache writes use the five-minute rate unless a one-hour subdivision is reported (2x base input); context premiums, discounts and extra service fees are excluded.</p><p id="import-details"></p><p>Sources: Anthropic and OpenAI official API pricing; CarbonBit methodology v1.1.0 (Epoch AI 2025, Google 2025 and Ember 2024). Full source URLs and limitations: docs/usage-methodology.md in the application repository.</p></details></div></section>
+      <section class="surface"><header><h2>Models</h2><span class="sub">Reported token shares</span></header><div class="body"><table><thead><tr><th scope="col">Model</th><th scope="col">Tokens</th><th scope="col">Share</th></tr></thead><tbody id="models"></tbody></table></div></section>
+      <section class="surface"><header><h2>Providers and tools</h2></header><div class="body"><dl id="providers"></dl><h3>Tool calls by category</h3><dl id="tools"></dl><p class="sub">Recorded tool starts only; results are not counted again.</p></div></section>
+    </div>
+    <section class="coverage"><h2>Import coverage</h2><p id="coverage">Waiting for the local index.</p><p class="sub">Only log formats with verified usage fields contribute tokens. Sources without usage still appear in Live. Deleted logs and unreported activity cannot be recovered; a period is never a guarantee of complete account usage.</p></section>
+    <footer>Kept on this device. No prompts, code, tool arguments or responses are retained in history.</footer>
+  </main>
+</body>
+</html>

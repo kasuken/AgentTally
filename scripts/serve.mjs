@@ -10,7 +10,7 @@ const root = fileURLToPath(new URL("../ui/", import.meta.url));
 const port = Number(process.env.PORT) || 5178;
 // ?live mode: the debug binary prints one scan as JSON with --dump.
 const exe = fileURLToPath(new URL("../src-tauri/target/debug/agent-tally" + (process.platform === "win32" ? ".exe" : ""), import.meta.url));
-const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".png": "image/png" };
+const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" };
 
 createServer(async (req, res) => {
   if (req.url === "/api/snapshot") {

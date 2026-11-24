@@ -37,7 +37,7 @@ export const STATUS = {
 
 /** Sentence-case status names shared by both interfaces. */
 export const STATUS_TEXT = {
-  blocked: "Needs approval", waiting: "Your turn", working: "Working", idle: "Idle", sleeping: "Sleeping", offline: "Offline",
+  blocked: "Needs approval", waiting: "Reply needed", working: "Working", idle: "Idle", sleeping: "Sleeping", offline: "Offline",
 };
 
 export const KIND_ICON = {
@@ -78,6 +78,7 @@ export function describe(act) {
       const tool = toolName(act.tool);
       return text ? `${tool}: ${text}` : `${verb} with ${tool}`;
     }
+
     case "think": return text || "Thinking…";
     case "reply": return text || "Writing a reply";
     case "user": return `You: ${text}`;
@@ -86,6 +87,17 @@ export function describe(act) {
     case "wait": return text || "Waiting for you";
     default: return text;
   }
+}
+
+export const fileActivityOnly = (session) => !!session.presenceOnly || session.provider === "opencode";
+
+export function sessionAction(session) {
+  if (fileActivityOnly(session)) return "File activity only";
+  if (session.current) return describe(session.current);
+  if (session.status === "blocked") return "Awaiting permission";
+  if (session.status === "waiting") return "Waiting for your reply";
+  if (session.status === "working") return "No action reported";
+  return "No recent events";
 }
 
 /** Where on its project's hex flower a robot should stand. */

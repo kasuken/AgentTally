@@ -10,9 +10,10 @@ const demo = createDemo();
 const modeFile = process.argv[2];
 const port = Number(process.env.PORT) || 5179;
 if (!modeFile) throw new Error('Pass a mode file containing ready, empty, or error');
-const types = {'.html':'text/html','.js':'text/javascript','.css':'text/css','.woff2':'font/woff2'};
+const types = {'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml'};
 createServer(async (req,res) => {
   if (req.url === '/api/snapshot') {
+    res.setHeader('X-AgentTally-Fixture', '1');
     const mode = (await readFile(modeFile,'utf8').catch(()=> 'error')).trim();
     if (mode === 'error') return res.writeHead(503).end('Fixture unavailable');
     const snap = demo.tick();

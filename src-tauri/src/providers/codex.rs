@@ -1,10 +1,11 @@
 //! Codex rollouts: `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`.
 
 use crate::model::{Activity, Kind, Session};
-use crate::util::{clean_prompt, clip, path_str, s, short_path, summarize_args, ts_of, u64_at};
+use crate::util::{clean_prompt, clip, path_str, s, short_path, summarize_args, ts_of};
 use serde_json::Value;
 
 pub fn apply(sess: &mut Session, v: &Value) {
+    sess.observe_usage(super::Format::Codex, v);
     let ts = ts_of(v.get("timestamp"));
     let p = v.get("payload").unwrap_or(&Value::Null);
     match s(v, "type").unwrap_or("") {
@@ -66,11 +67,6 @@ fn event(sess: &mut Session, p: &Value, ts: i64) {
             }
         }
         "token_count" => {
-            let total = |k: &str| u64_at(p, &["info", "total_token_usage", k]);
-            if total("total_tokens") > 0 {
-                sess.tokens_in = total("input_tokens");
-                sess.tokens_out = total("output_tokens");
-            }
             sess.touch(ts);
         }
         "thread_settings_applied" => {
@@ -108,19 +104,20 @@ fn event(sess: &mut Session, p: &Value, ts: i64) {
 }
 
 fn item(sess: &mut Session, p: &Value, ts: i64) {
+    let call = s(p, "call_id").or_else(|| s(p, "id"));
     match s(p, "type").unwrap_or("") {
         "function_call" => {
             let name = s(p, "name").unwrap_or("tool");
             let args = p.get("arguments").cloned().unwrap_or(Value::Null);
             sess.blocked = false;
-            sess.push(Activity::tool(ts, name, summarize_args(&args)));
+            sess.push_tool_once(call, Activity::tool(ts, name, summarize_args(&args)));
         }
         "custom_tool_call" => {
             let name = s(p, "name").unwrap_or("tool");
             let input = s(p, "input").unwrap_or("");
             let (tool, text) = custom_call(name, input);
             sess.blocked = false;
-            sess.push(Activity::tool(ts, &tool, text));
+            sess.push_tool_once(call, Activity::tool(ts, &tool, text));
         }
         "local_shell_call" => {
             let cmd = p
@@ -128,11 +125,11 @@ fn item(sess: &mut Session, p: &Value, ts: i64) {
                 .and_then(Value::as_array)
                 .map(|a| a.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(" "))
                 .unwrap_or_default();
-            sess.push(Activity::tool(ts, "shell", clip(&cmd, 110)));
+            sess.push_tool_once(call, Activity::tool(ts, "shell", clip(&cmd, 110)));
         }
         "web_search_call" => {
             let q = path_str(p, &["action", "query"]).unwrap_or("");
-            sess.push(Activity::tool(ts, "web_search", clip(q, 110)));
+            sess.push_tool_once(call, Activity::tool(ts, "web_search", clip(q, 110)));
         }
         "reasoning" => sess.push(Activity::new(ts, Kind::Think, "")),
         "message" if s(p, "role") == Some("assistant") => {

@@ -1,8 +1,10 @@
 mod buddy;
+mod history;
 mod model;
 mod providers;
 mod scanner;
 mod util;
+mod usage_events;
 
 use model::Snapshot;
 use scanner::Scanner;
@@ -38,13 +40,14 @@ pub fn run() {
     }
     tauri::Builder::default()
         .manage(Latest::default())
-        .invoke_handler(tauri::generate_handler![snapshot, buddy::show_main])
+        .invoke_handler(tauri::generate_handler![snapshot, buddy::show_main, history::usage_summary])
         .on_window_event(|window, event| {
             if window.label() == "main" {
                 buddy::on_main_event(window, event);
             }
         })
         .setup(|app| {
+            app.manage(history::History::start(app.path().app_data_dir().map_err(|e| e.to_string())));
             let handle = app.handle().clone();
             let latest = app.state::<Latest>().0.clone();
             std::thread::spawn(move || {

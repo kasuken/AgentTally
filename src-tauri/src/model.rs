@@ -1,7 +1,9 @@
 //! Normalized, provider-agnostic view of an agent session.
 
 use serde::Serialize;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use crate::providers::Format;
+use crate::usage_events::UsageParser;
 
 const MAX_EVENTS: usize = 60;
 const SEC: i64 = 1000;
@@ -140,7 +142,12 @@ pub struct Session {
     pub tool_calls: u32,
     pub station_counts: [u32; 6],
     pub events: VecDeque<Activity>,
-    pub last_usage_id: Option<String>,
+    usage: UsageParser,
+    /// Contributions already included in the mutable live total, keyed by observation ID.
+    usage_rows: BTreeMap<String, (Option<u64>, Option<u64>)>,
+    tool_ids: BTreeSet<String>,
+    known_in: usize,
+    known_out: usize,
     /// VS Code: index of the latest request whose result has arrived.
     pub finished_request: Option<u64>,
 }
@@ -148,6 +155,60 @@ pub struct Session {
 impl Session {
     pub fn new(provider: &'static str, id: impl Into<String>) -> Self {
         Session { provider, id: id.into(), ..Default::default() }
+    }
+
+    pub fn observe_usage(&mut self, format: Format, v: &serde_json::Value) {
+        if format == Format::Gemini {
+            self.usage_rows.clear();
+            self.known_in = 0;
+            self.known_out = 0;
+            self.tokens_in = 0;
+            self.tokens_out = 0;
+        }
+        let observations = self.usage.process(format, v);
+        // Live may start at a bounded tail. Its historical contributions are incomplete,
+        // but Codex explicitly reports the session's lifetime counters.
+        if format == Format::Codex {
+            if let Some(t) = self.usage.codex_totals() {
+                self.tokens_in = t.input.unwrap_or(0);
+                self.tokens_out = t.output.unwrap_or(0);
+                self.known_in = usize::from(t.input.is_some());
+                self.known_out = usize::from(t.output.is_some());
+            }
+            return;
+        }
+        for row in observations {
+            if row.tool_category.is_some() { continue }
+            let key = row.id;
+            if let Some((input, output)) = self.usage_rows.remove(&key) {
+                self.tokens_in = self.tokens_in.saturating_sub(input.unwrap_or(0));
+                self.tokens_out = self.tokens_out.saturating_sub(output.unwrap_or(0));
+                self.known_in -= usize::from(input.is_some());
+                self.known_out -= usize::from(output.is_some());
+            }
+            if let Some(t) = row.tokens {
+                let add = |first: Option<u64>, next: Option<u64>| match (first, next) {
+                    (Some(a), Some(b)) => Some(a.saturating_add(b)),
+                    _ => first.or(next),
+                };
+                let input = if t.input_includes_cache == Some(false) {
+                    add(add(t.input, t.cache_read), t.cache_write)
+                } else { t.input };
+                let input = add(input, t.tool_input);
+                let output = if t.output_includes_reasoning { t.output } else { add(t.output, t.reasoning) };
+                self.tokens_in = self.tokens_in.saturating_add(input.unwrap_or(0));
+                self.tokens_out = self.tokens_out.saturating_add(output.unwrap_or(0));
+                self.known_in += usize::from(input.is_some());
+                self.known_out += usize::from(output.is_some());
+                self.usage_rows.insert(key, (input, output));
+            }
+        }
+    }
+
+    pub fn push_tool_once(&mut self, id: Option<&str>, act: Activity) {
+        if id.is_none_or(|id| self.tool_ids.insert(id.to_owned())) {
+            self.push(act);
+        }
     }
 
     pub fn touch(&mut self, ts: i64) {
@@ -274,12 +335,15 @@ impl Session {
             parent: self.parent.clone().map(|p| format!("{}:{}", self.provider, p)),
             role: self.role.clone(),
             status: self.status(now),
+            presence_only: self.presence_only,
             started: self.started,
             last_ts: self.activity_ts(),
             current: self.current().cloned(),
             events: self.events.iter().skip(skip).cloned().collect(),
             tokens_in: self.tokens_in,
             tokens_out: self.tokens_out,
+            tokens_in_known: self.known_in > 0,
+            tokens_out_known: self.known_out > 0,
             tool_calls: self.tool_calls,
             stations: self.station_counts,
         }
@@ -301,12 +365,15 @@ pub struct SessionView {
     pub parent: Option<String>,
     pub role: Option<String>,
     pub status: Status,
+    pub presence_only: bool,
     pub started: i64,
     pub last_ts: i64,
     pub current: Option<Activity>,
     pub events: Vec<Activity>,
     pub tokens_in: u64,
     pub tokens_out: u64,
+    pub tokens_in_known: bool,
+    pub tokens_out_known: bool,
     pub tool_calls: u32,
     pub stations: [u32; 6],
 }

@@ -67,8 +67,29 @@ pub struct Roots {
     pub opencode: Vec<PathBuf>,
 }
 
+/// Isolate the debug scanner and history database for end-to-end tests.
+#[cfg(debug_assertions)]
+pub fn fixture_root() -> Option<PathBuf> {
+    std::env::var_os("AGENT_TALLY_FIXTURE_ROOT").map(|path| {
+        let root = PathBuf::from(path);
+        assert!(root.is_absolute(), "AGENT_TALLY_FIXTURE_ROOT must be absolute");
+        root
+    })
+}
+
 impl Roots {
     pub fn detect() -> Self {
+        #[cfg(debug_assertions)]
+        if let Some(root) = fixture_root() {
+            return Self {
+                claude: root.join(".claude/projects"),
+                codex: root.join(".codex/sessions"),
+                copilot: root.join(".copilot/session-state"),
+                vscode: vec![("Code".to_owned(), root.join("Code/User"))],
+                gemini: root.join(".gemini"),
+                opencode: vec![root.join("opencode")],
+            };
+        }
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         let env_dir = |key: &str, fallback: PathBuf| {
             std::env::var_os(key).map(PathBuf::from).unwrap_or(fallback)

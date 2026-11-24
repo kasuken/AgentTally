@@ -1,120 +1,98 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="color-scheme" content="dark" />
-  <title>AgentTally</title>
-  <link rel="icon" href="data:," />
-  <!-- Two interfaces over the same page: "pixel" (default office) and "pro" (workspace board). -->
-  <script>try { if (JSON.parse(localStorage.getItem("tally.ui")) === "pro") document.documentElement.dataset.ui = "pro"; } catch (e) {}</script>
-  <link id="theme-pixel" rel="stylesheet" href="style.css" />
-  <link id="theme-pro" rel="stylesheet" href="pro.css" disabled />
-  <script>if (document.documentElement.dataset.ui === "pro") { document.getElementById("theme-pixel").disabled = true; document.getElementById("theme-pro").disabled = false; }</script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#192d43">
+  <title>Live activity · AgentTally</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="shell.css">
+  <link rel="stylesheet" href="pro.css">
 </head>
 <body>
-<header class="topbar">
-  <div class="logo">
-    <span class="logo-tile"><canvas id="logo-bot" width="32" height="36" aria-hidden="true"></canvas></span>
-    <div>
-      <h1>Agent<span>Tally</span></h1>
-      <p><span id="source-badge" class="source-badge">CONNECTING</span> <span id="subtitle" role="status">Scanning local logs…</span></p>
+  <a class="skip-link" href="#main">Skip to live activity</a>
+  <header class="top">
+    <div class="bar">
+      <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>AgentTally</div>
+      <nav aria-label="Workspace views">
+        <a href="index.html" aria-current="page">Live activity</a>
+        <a href="usage.html" id="usage-link">Usage</a>
+      </nav>
+      <span class="source-badge" id="source-badge" role="status">Connecting</span>
     </div>
-  </div>
-  <div class="counters" id="counters" aria-label="Session overview"></div>
-  <div class="controls">
-    <div class="seg" id="window-filter" role="group" aria-label="Time window">
-      <button data-w="live" title="Active sessions and recent idle sessions">Live</button><button data-w="1h">1h</button><button data-w="6h">6h</button><button data-w="24h">24h</button>
+  </header>
+  <main id="main">
+    <div class="intro">
+      <div><h1>Live activity</h1><p id="overview-summary">Waiting for the first scan…</p></div>
+      <span class="period" id="updated">No snapshot yet</span>
     </div>
-    <button class="btn ui-toggle" id="ui-toggle" title="Switch interface (U)"><span class="ui-long">Pro view</span><span class="ui-short">Pro</span></button>
-    <button class="btn" id="help-button" aria-label="Help and keyboard shortcuts" title="Guide (?)">?</button>
-  </div>
-</header>
-
-<main class="layout">
-  <section class="map-col" aria-label="Agent workspace and activity">
-    <div class="win map-win">
-      <div class="map" id="map-wrap">
-        <header class="floor-head pixel-only">
-          <div class="floor-number" aria-hidden="true" id="floor-number">1F</div>
-          <div class="floor-title"><h2 id="floor-title">Office floor</h2><p id="world-count"></p></div>
-          <div class="floor-clock" title="Local time"><i aria-hidden="true"></i><time id="office-clock"></time></div>
-          <button id="station-guide" class="btn">Room guide</button>
+    <p class="connection-warning" id="connection-warning" role="status" hidden></p>
+    <section class="filter-bar" aria-label="Filter sessions and stream">
+      <label class="search">
+        <svg viewBox="0 0 20 20" width="17" height="17" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m12.6 12.6 4 4"/></svg>
+        <span class="sr-only">Search sessions</span>
+        <input type="search" id="search" placeholder="Find a session, project or agent" autocomplete="off">
+        <kbd aria-hidden="true">/</kbd>
+      </label>
+      <label><span class="sr-only">Project</span><select id="project-filter"><option value="">All projects</option></select></label>
+      <label><span class="sr-only">Session status</span><select id="status-filter">
+        <option value="all">All states</option><option value="attention">Needs you</option>
+        <option value="working">Working</option><option value="resting">At rest</option>
+      </select></label>
+      <label><span class="sr-only">Time window</span><select id="window-filter">
+        <option value="live" selected>Live now</option><option value="1h">Last hour</option><option value="6h">Last 6 hours</option><option value="24h">Last 24 hours</option>
+      </select></label>
+      <button type="button" id="sources-button" aria-expanded="false" aria-controls="sources">Sources</button>
+      <button type="button" class="text-btn" id="reset-filters" hidden>Clear filters</button>
+      <div id="sources" hidden><p>Show sessions from</p><div id="legend" role="group" aria-label="Activity sources"></div></div>
+    </section>
+    <div class="workspace">
+      <section class="surface sessions" aria-labelledby="sessions-title">
+        <header class="surface-head">
+          <h2 id="sessions-title">Sessions</h2>
+          <label><span class="sr-only">Sort sessions</span><select class="quiet-select" id="sort">
+            <option value="attention">Needs you first</option><option value="recent">Recently active</option><option value="project">By project</option>
+          </select></label>
         </header>
-        <div class="scene-shell pixel-only">
-          <nav class="room-rail" id="room-rail" aria-label="Room close-ups" hidden>
-            <h3>Room views</h3>
-          </nav>
-          <div class="stage">
-            <canvas id="world" role="img" aria-label="Animated office floor. Use the team directory to inspect agents with a keyboard."></canvas>
-            <div class="map-bottom">
-              <div class="hint">Drag to pan · Scroll to zoom</div>
-              <div class="map-controls">
-                <button class="btn" id="cinema" aria-pressed="false" title="Start cinematic camera">Cinema</button>
-                <button class="btn" id="motion" aria-pressed="false" title="Pause animation; live data keeps updating">Ⅱ <span>Motion</span></button>
-                <button class="btn" id="zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
-                <button class="btn" id="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
-                <button class="btn" id="recenter" title="Fit view (F)">⌖ <span>Fit</span></button>
-              </div>
-            </div>
+        <div class="board" id="board" role="group" aria-label="Sessions by project" hidden></div>
+        <div class="empty" id="empty">
+          <h3 id="empty-title">Connecting to the scanner</h3>
+          <p id="empty-message">Sessions will appear here after the first scan.</p>
+          <button type="button" id="empty-reset" hidden>Clear filters</button>
+        </div>
+        <p class="board-note"><span class="tick-key" aria-hidden="true"></span>Each mark is a logged event, not time spent.</p>
+      </section>
+      <aside class="surface inspector" id="detail" aria-labelledby="detail-title">
+        <header class="surface-head"><h2 id="detail-title" tabindex="-1">Session details</h2><button id="close-detail" class="icon-btn" aria-label="Close session details" title="Close (Esc)" hidden>×</button></header>
+        <p id="detail-placeholder">Select a session or stream event to inspect its activity.</p>
+        <div id="detail-body" hidden>
+          <div class="detail-summary">
+            <span id="detail-status" class="state"></span>
+            <h3 id="session-title"></h3>
+            <p id="current-action"></p><p id="attention-note" hidden></p>
           </div>
+          <dl class="facts" id="facts"></dl>
+          <div class="detail-actions"><button type="button" id="focus-agent" class="text-btn">Show in sessions</button><button type="button" id="copy-path" class="text-btn">Copy path</button></div>
+          <p id="copy-status" role="status"></p>
+          <h3 class="events-title">Recent events</h3><ol class="recent" id="recent"></ol>
         </div>
-        <div class="board pro-only" id="board" hidden aria-label="Workspace: projects and their sessions"></div>
-        <div class="map-top">
-          <span class="source-label pixel-only">Sources</span><div class="legend" id="legend" aria-label="Sources"></div>
-        </div>
-        <div id="connection-warning" class="connection-warning" role="status" hidden></div>
-        <div class="empty" id="empty" hidden>
-          <div class="win dialog">
-            <h2 id="empty-title">All quiet here</h2>
-            <p id="empty-message"></p>
-            <button class="btn" id="empty-reset">Reset filters</button>
-          </div>
-        </div>
-      </div>
+      </aside>
     </div>
-    <section class="log win" aria-label="Activity stream">
-      <div class="win-head"><h3 data-pro="Activity">Activity journal</h3><span id="updated" class="muted">Waiting for first scan</span></div>
-      <ol id="world-log"></ol>
+    <section class="feed" aria-labelledby="feed-title">
+      <header class="surface-head"><h2 id="feed-title">Activity stream</h2><span class="head-note">Newest first</span></header>
+      <ol id="activity-log"></ol>
+      <p id="log-empty">Waiting for recorded events.</p>
     </section>
-  </section>
-
-  <aside class="side" aria-label="Sessions">
-    <section class="win detail" id="detail" hidden aria-label="Selected session"></section>
-    <section class="win roster">
-      <div class="win-head">
-        <h3><span data-pro="Sessions">Team directory</span> <span id="party-count"></span></h3>
-        <label><span class="sr-only">Sort sessions</span><select id="sort" aria-label="Sort sessions"><option value="attention">Needs you first</option><option value="recent">Recently active</option><option value="project">By project</option></select></label>
-      </div>
-      <p id="overview-summary" class="summary">Finding your agents…</p>
-      <div class="finder">
-        <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Find a session, project, agent…" aria-label="Search sessions" autocomplete="off" /><kbd>/</kbd></label>
-        <div class="finder-row">
-          <label class="project-select"><span class="sr-only">Project</span><select id="project-filter" aria-label="Project"><option value="">All projects</option></select></label>
-          <button class="text-btn" id="reset-filters" hidden>Clear filters</button>
-        </div>
-      </div>
-      <div class="status-tabs" id="status-filter" role="group" aria-label="Session status"><button data-status="all">All</button><button data-status="attention">Needs you</button><button data-status="working">Working</button><button data-status="resting">At rest</button></div>
-      <ul id="roster"></ul>
-    </section>
-  </aside>
-</main>
-
-<dialog id="help" class="win" aria-labelledby="guide-title">
-  <div class="help-heading"><h2 id="guide-title" data-pro="Guide">Room guide</h2><button class="btn" id="close-help" aria-label="Close guide">✕</button></div>
-  <p id="guide-intro" data-pro="Each project is a panel in the workspace, with one row per agent session. The timeline shows the last 30 minutes of activity: each tick is one event, coloured by what the agent was doing. Indented rows are sub-agents.">Each robot is an agent session. Its current activity decides where it works. Project teams share desk banks; their sub-agents appear as small drones.</p>
-  <div id="station-atlas" class="station-atlas pixel-only" aria-label="Buildings and activities"></div>
-  <div class="tone-legend pro-only" aria-label="Timeline colours"><span class="t-hub">Think</span><span class="t-library">Read</span><span class="t-forge">Edit</span><span class="t-terminal">Run</span><span class="t-radar">Web</span><span class="t-tasks">Plan</span><span class="t-user">Prompt</span><span class="t-done">Turn done</span><span class="t-error">Error</span></div>
-  <div class="help-status">
-    <p><b class="green">● WORKING</b> A recent turn or tool is running.</p>
-    <p><b class="red">? NEEDS APPROVAL</b> Check the original app for a permission request.</p>
-    <p><b class="gold">! YOUR TURN</b> The agent has finished its turn.</p>
-  </div>
-  <p>Choose a session to read its latest activity. Filters apply to the workspace, directory and activity journal. The counters always cover the selected time window and sources.</p>
-  <p>LIVE includes active sessions and idle sessions seen in the last 15 minutes. Active sessions stay visible in every time window. OpenCode reports file activity only.</p>
-  <div class="shortcuts"><span><kbd>/</kbd> Search</span><span><kbd>F</kbd> <span data-pro="Back to top">Fit map</span></span><span><kbd>U</kbd> Pixel / Pro view</span><span class="pixel-only"><kbd>Y</kbd> Change map</span><span><kbd>Esc</kbd> Close details</span><span><kbd>?</kbd> This guide</span></div>
-  <p class="muted">AgentTally reads local logs. Reply to agents and approve requests in their original applications. Motion can be paused independently of live updates.</p>
-</dialog>
-<script type="module" src="js/main.js"></script>
+    <footer class="bottom"><span id="source-note">AgentTally reads local logs.</span><button class="text-btn" id="help-button">Dashboard guide <kbd>?</kbd></button></footer>
+  </main>
+  <dialog id="help" aria-labelledby="guide-title">
+    <header class="surface-head"><h2 id="guide-title">Dashboard guide</h2><button class="icon-btn" id="close-help" aria-label="Close guide">×</button></header>
+    <p>Projects needing an approval or a reply appear first by default. Indented sessions are sub-agents. Select a row or a stream event to inspect that session.</p>
+    <p>Timelines share the same 30-minute window. Marks are recent recorded events; blank space is not a measure of idle time. The scanner reads a bounded part of each log.</p>
+    <p>Filters apply to sessions and the stream. Live now includes active sessions and idle sessions seen in the last 15 minutes. Active sessions stay visible in every time window.</p>
+    <p>Review permissions and reply in the original app. File-only sources report changes, not tool calls or token usage.</p>
+    <dl class="shortcuts"><div><dt>Search sessions</dt><dd><kbd>/</kbd></dd></div><div><dt>Back to sessions</dt><dd><kbd>F</kbd></dd></div><div><dt>Close details or guide</dt><dd><kbd>Esc</kbd></dd></div><div><dt>Show this guide</dt><dd><kbd>?</kbd></dd></div></dl>
+  </dialog>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>

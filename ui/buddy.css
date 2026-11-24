@@ -1,107 +1,84 @@
-@font-face {
-  font-family: "Press Start 2P";
-  src: url("fonts/press-start-2p.woff2") format("woff2");
-  font-display: block;
-}
-@font-face {
-  font-family: "VT323";
-  src: url("fonts/vt323.woff2") format("woff2");
-  font-display: block;
-}
-
 :root {
-  --outline: #161827;
-  --paper: #ffffff;
-  --ink: #161827;
-  --accent: #46e07a;
-  --notch: polygon(6px 0, calc(100% - 6px) 0, calc(100% - 6px) 3px, calc(100% - 3px) 3px, calc(100% - 3px) 6px, 100% 6px,
-    100% calc(100% - 6px), calc(100% - 3px) calc(100% - 6px), calc(100% - 3px) calc(100% - 3px), calc(100% - 6px) calc(100% - 3px),
-    calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 3px), 3px calc(100% - 3px), 3px calc(100% - 6px), 0 calc(100% - 6px),
-    0 6px, 3px 6px, 3px 3px, 6px 3px);
-}
-
-/* The window itself is transparent: only the robot and its cloud are visible. */
-html, body {
-  margin: 0;
-  height: 100%;
-  background: transparent;
-  overflow: hidden;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.stage {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.cloud {
-  all: unset;
-  display: block;
-  box-sizing: border-box;
-  width: calc(100% - 8px);
-  padding: 3px;
-  background: var(--outline);
-  clip-path: var(--notch);
-  cursor: pointer;
-  transform-origin: 50% 100%;
-}
-.cloud.pop { animation: pop 0.28s steps(4) both; }
-@keyframes pop { from { transform: scale(0.85); } to { transform: scale(1); } }
-.cloud-in {
-  display: block;
-  padding: 6px 9px 5px;
-  background: var(--paper);
+  color-scheme: light;
+  --paper: #f4f6fa;
+  --ink: #182638;
+  --secondary: #51657a;
+  --nav: #192d43;
+  --blue: #345dc4;
+  --line: #d5dfe8;
+  font: 14px/1.35 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
   color: var(--ink);
-  clip-path: var(--notch);
-  box-shadow: inset 0 -3px 0 #c9cdd8, inset 4px 0 0 var(--accent);
+  background: var(--paper);
 }
-/* Header: how many agents are in each state, most urgent first. */
-.who {
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; }
+h1, h2, p, dl, dd { margin: 0; }
+.bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--nav);
+  color: white;
+  user-select: none;
+}
+.bar[data-native] { cursor: move; }
+.bar > * { pointer-events: none; }
+h1 { display: flex; gap: 9px; align-items: center; font-size: 15px; letter-spacing: -.035em; font-weight: 650; }
+.mark { display: inline-flex; gap: 2px; align-items: flex-end; height: 16px; transform: skew(-11deg); }
+.mark i { width: 3px; height: 60%; background: #a6c9fc; }
+.mark i:nth-child(2) { height: 100%; }
+.mark i:nth-child(3) { height: 76%; }
+.source { color: #dbe7f5; text-align: end; font-size: 12px; }
+.source[data-tone="lost"] { color: #ffdb9e; }
+main { flex: 1; display: flex; flex-direction: column; background: white; }
+.priority { flex: 1; padding: 12px 16px 10px; }
+.status-line { display: flex; align-items: baseline; justify-content: space-between; gap: 5px; margin-bottom: 5px; }
+#status { color: var(--secondary); font-size: 12px; font-weight: 650; }
+#status[data-tone="blocked"] { color: #905414; }
+#status[data-tone="waiting"] { color: var(--blue); }
+#status[data-tone="working"] { color: #14716a; }
+#seen, .context, #scan { font-size: 12px; color: var(--secondary); }
+h2 { font-size: 20px; font-weight: 640; line-height: 1.19; letter-spacing: -.035em; }
+h2, .action { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.context { margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.action { margin-top: 6px; }
+.counts {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px 8px;
-  font: 7px/1.4 "Press Start 2P", monospace;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-.who b { font-weight: normal; color: var(--c, var(--ink)); text-shadow: 0 1px 0 #161827; }
-
-/* One line per busy agent: who it is and what it is doing right now. */
-.feed { list-style: none; margin: 4px 0 0; padding: 0; }
-.feed li {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  margin: 0 -4px;
-  padding: 0 4px;
-  font: 18px/1 "VT323", monospace;
-  white-space: nowrap;
-}
-.feed li.fresh { animation: fresh 1.2s steps(6) both; }
-@keyframes fresh { from { background: #fff1a8; } to { background: transparent; } }
-.feed i { width: 6px; height: 6px; flex: none; align-self: center; background: var(--c); box-shadow: 0 0 0 1px var(--outline); }
-.feed b { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; font-weight: normal; color: #5a5f7a; }
-.feed span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.feed li.needs span { color: var(--s); }
-.more { display: block; margin-top: 1px; font: 16px/1 "VT323", monospace; color: #7c7fa8; }
-
-/* Thought trail from the cloud down to the robot's head; it overlaps the empty top of the canvas. */
-.trail { position: relative; z-index: 1; width: 100%; height: 14px; margin-bottom: -38px; pointer-events: none; }
-[hidden] { display: none !important; }
-.trail i {
-  position: absolute;
+  gap: 4px 16px;
+  padding: 9px 16px;
+  border-top: 1px solid var(--line);
   background: var(--paper);
-  box-shadow: 0 0 0 3px var(--outline);
 }
-.trail i:nth-child(1) { left: calc(50% + 6px); top: 2px; width: 6px; height: 6px; }
-.trail i:nth-child(2) { left: calc(50% + 1px); top: 11px; width: 3px; height: 3px; }
-
-#bot {
-  display: block;
-  image-rendering: pixelated;
-  cursor: grab;
+.counts div { display: flex; align-items: baseline; gap: 4px; }
+dt { color: var(--secondary); font-size: 12px; }
+dd { order: -1; font-weight: 650; }
+footer { display: flex; align-items: center; gap: 6px; padding: 5px 10px 5px 16px; border-top: 1px solid var(--line); }
+#scan { flex: 1; }
+button {
+  flex: none;
+  min-width: 30px;
+  min-height: 32px;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--blue);
+  background: transparent;
+  cursor: pointer;
+}
+button:hover { background: #e4ebf7; }
+button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+#restore { font-weight: 600; }
+#move { display: grid; place-items: center; border-color: #8a9bb0; padding: 4px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 240px) {
+  .bar, .status-line, footer { flex-wrap: wrap; }
+  h2, .action { display: block; }
+  .context { white-space: normal; overflow-wrap: anywhere; }
 }

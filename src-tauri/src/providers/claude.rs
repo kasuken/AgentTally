@@ -1,10 +1,11 @@
 //! Claude Code transcripts: `~/.claude/projects/<project>/<session>.jsonl`.
 
 use crate::model::{Activity, Kind, Session};
-use crate::util::{clean_prompt, clip, s, summarize_args, ts_of, u64_at};
+use crate::util::{clean_prompt, clip, s, summarize_args, ts_of};
 use serde_json::Value;
 
 pub fn apply(sess: &mut Session, v: &Value) {
+    sess.observe_usage(super::Format::Claude, v);
     let ts = ts_of(v.get("timestamp"));
     // The first cwd is the project root; later lines follow the agent's `cd`s.
     if let (None, Some(cwd)) = (&sess.cwd, s(v, "cwd")) {
@@ -93,22 +94,13 @@ fn assistant(sess: &mut Session, v: &Value, ts: i64) {
     if let Some(m) = s(msg, "model").filter(|m| !m.starts_with('<')) {
         sess.model = Some(m.to_string());
     }
-    // One API message is written as several lines (one per content block)
-    // that repeat the same usage numbers.
-    let mid = s(msg, "id").map(str::to_string);
-    if mid.is_some() && mid != sess.last_usage_id {
-        let u = |k: &str| u64_at(msg, &["usage", k]);
-        sess.tokens_in += u("input_tokens") + u("cache_read_input_tokens") + u("cache_creation_input_tokens");
-        sess.tokens_out += u("output_tokens");
-        sess.last_usage_id = mid;
-    }
     if let Some(Value::Array(items)) = msg.get("content") {
         for item in items {
             match s(item, "type") {
                 Some("tool_use") => {
                     let name = s(item, "name").unwrap_or("tool");
                     let input = item.get("input").cloned().unwrap_or(Value::Null);
-                    sess.push(Activity::tool(ts, name, summarize_args(&input)));
+                    sess.push_tool_once(s(item, "id"), Activity::tool(ts, name, summarize_args(&input)));
                 }
                 Some("text") => {
                     let t = s(item, "text").unwrap_or("");
