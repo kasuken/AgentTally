@@ -1,14 +1,38 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectSessions, sortSessions, inWindow, nestSubagents, streamEvents } from '../ui/js/selectors.js';
+import { selectSessions, sortSessions, inWindow, nestSubagents, streamEvents, livePresentation } from '../ui/js/selectors.js';
 import { groupProjects, timelineTicks, eventTone, TIMELINE_MS } from '../ui/js/board.js';
 import { sessionAction } from '../ui/js/meta.js';
+import { priorityQueue, projectSignals } from '../ui/js/signal-deck.js';
 
 const now = 100_000_000;
 const session = (key, status, age = 0, other = {}) => ({
   key, status, lastTs: now - age, project: 'app', provider: 'codex', title: key, events: [], ...other,
 });
 const filters = { hidden: new Set(), window: '6h', status: 'all', query: '', project: '' };
+
+test('the inbox exposes every request, approvals before replies, then falls back to working sessions only', () => {
+  const list = [session('reply','waiting'),session('approval','blocked'),session('busy','working',500),session('fresh','working')];
+  const queued = () => priorityQueue(list).map(s => s.key);
+  assert.deepEqual(queued(),['approval','reply']);
+  list[0].status = 'working';
+  assert.deepEqual(queued(),['approval']);
+  list[1].status = 'idle';
+  assert.deepEqual(queued(),['busy','fresh','reply']);
+  assert.deepEqual(priorityQueue([list[1]]),[]);
+});
+test('project signal counts recorded events at minute boundaries without merging names or inferring duration', () => {
+  const start = now - TIMELINE_MS;
+  const event = (ts,kind='tool') => ({ts,kind});
+  const a = session('one','working',0,{cwd:'/one/app',events:[event(start-1),event(start),event(start+7*60000),event(now),event(now+1)]});
+  const b = session('two','working',0,{cwd:a.cwd,events:[event(now,'wait'),event(now,'system')]});
+  const c = session('three','working',0,{cwd:'/two/app',presenceOnly:true});
+  const [first,second] = projectSignals([c,a,b],now);
+  assert.equal(first.key,a.cwd); assert.equal(first.total,4);
+  assert.deepEqual(first.bins.flatMap((n,i)=>n ? [[i,n]] : []),[[0,1],[7,1],[29,2]]);
+  assert.deepEqual([...first.waits],[29]);
+  assert.equal(second.key,c.cwd); assert.equal(second.total,0);
+});
 
 test('attention stays visible outside the historical window, while old idle sessions age out', () => {
   for (const status of ['working','blocked','waiting']) assert.equal(inWindow(session(status,status,30*3600e3),'1h',now),true);
@@ -17,6 +41,23 @@ test('attention stays visible outside the historical window, while old idle sess
 test('live excludes sleeping/offline and only retains recent idle sessions', () => {
   const sessions = [session('active','working'),session('recent','idle',60e3),session('old','idle',16*60e3),session('closed','offline'),session('sleep','sleeping')];
   assert.deepEqual(selectSessions(sessions,{...filters,window:'live'},now).map(s=>s.key),['active','recent']);
+});
+test('standby depends on the live window, not whether the scanner knows any sessions', () => {
+  const mode = (sessions, f = {...filters, window:'live'}) =>
+    livePresentation({sessions}, selectSessions(sessions, f, now), {filtered:f.window !== 'live' || !!f.query});
+  const old = session('prior', 'idle', 2 * 3600e3);
+  assert.equal(mode([]), 'standby');
+  assert.equal(mode([old]), 'standby');
+  for (const status of ['idle','working','blocked','waiting']) assert.equal(mode([old,session('new',status)]), 'sessions');
+  assert.equal(mode([old], {...filters, window:'24h'}), 'sessions');
+  assert.equal(mode([old], {...filters, window:'24h', query:'absent'}), 'no-results');
+});
+test('a missing or interrupted snapshot never implies the scanner is on standby', () => {
+  const snapshot = {sessions: [session('cached','working')]};
+  assert.equal(livePresentation(null, [], {}), 'connecting');
+  assert.equal(livePresentation(null, [], {interrupted:true}), 'unavailable');
+  assert.equal(livePresentation(snapshot, [], {interrupted:true}), 'stale');
+  assert.equal(livePresentation(snapshot, snapshot.sessions, {interrupted:true}), 'sessions');
 });
 test('search, provider, status and full project path filters compose', () => {
   const sessions = [session('a','blocked',0,{cwd:'C:/one/app',title:'Fix login'}),session('b','waiting',0,{cwd:'C:/two/app',title:'Fix login'}),session('c','blocked',0,{cwd:'C:/one/app',title:'Fix login',provider:'claude'})];

@@ -8,25 +8,50 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="shell.css">
   <link rel="stylesheet" href="pro.css">
+  <link rel="stylesheet" href="signal-deck.css">
 </head>
-<body>
+<body class="app-window live-window">
   <a class="skip-link" href="#main">Skip to live activity</a>
   <header class="top">
     <div class="bar">
       <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>AgentTally</div>
       <nav aria-label="Workspace views">
-        <a href="index.html" aria-current="page">Live activity</a>
-        <a href="usage.html" id="usage-link">Usage</a>
+        <a href="index.html" aria-current="page"><svg aria-hidden="true"><use href="workspace-icons.svg#activity"/></svg>Live activity</a>
+        <a href="usage.html" id="usage-link"><svg aria-hidden="true"><use href="workspace-icons.svg#usage"/></svg>Usage</a>
+        <a href="impact.html" id="impact-link"><svg aria-hidden="true"><use href="workspace-icons.svg#impact"/></svg>Impact</a>
       </nav>
+      <div class="rail-section">
+        <h2>Session state</h2>
+        <div class="status-lenses" id="status-lenses" role="group" aria-label="Filter by session state">
+          <button type="button" data-status="all" aria-pressed="true">All sessions <span>–</span></button>
+          <button type="button" data-status="attention" aria-pressed="false">Needs you <span>–</span></button>
+          <button type="button" data-status="working" aria-pressed="false">Working <span>–</span></button>
+          <button type="button" data-status="resting" aria-pressed="false">At rest <span>–</span></button>
+        </div>
+      </div>
       <span class="source-badge" id="source-badge" role="status">Connecting</span>
     </div>
   </header>
-  <main id="main">
+  <main id="main" class="empty-workspace">
     <div class="intro">
       <div><h1>Live activity</h1><p id="overview-summary">Waiting for the first scan…</p></div>
-      <span class="period" id="updated">No snapshot yet</span>
+      <button type="button" id="toggle-overview" class="view-toggle" aria-expanded="true" aria-controls="overview"><svg aria-hidden="true"><use href="workspace-icons.svg#overview"/></svg>Overview</button>
     </div>
     <p class="connection-warning" id="connection-warning" role="status" hidden></p>
+    <section class="signal-deck" id="overview" aria-label="Priority session and project activity">
+      <section class="priority" aria-labelledby="priority-title">
+        <header><h2 id="priority-title">Needs you</h2><span id="priority-count"></span></header>
+        <div id="priority-list"></div>
+        <p id="priority-empty">Waiting for the scanner to connect.</p>
+      </section>
+      <section class="signal-map" aria-labelledby="signal-title">
+        <header><h2 id="signal-title">Project signal</h2><span id="signal-range">Last 30 minutes</span></header>
+        <div class="signal-lanes" id="signal-lanes"></div>
+        <p id="signal-empty">No snapshot available.</p>
+        <div class="signal-axis" aria-hidden="true"><span></span><div><span>−30m</span><span>−15m</span><span id="signal-end">Now</span></div><span>Total</span></div>
+        <p class="signal-caption">Events per minute <span id="signal-wait-key" hidden>Includes a wait event</span></p>
+      </section>
+    </section>
     <section class="filter-bar" aria-label="Filter sessions and stream">
       <label class="search">
         <svg viewBox="0 0 20 20" width="17" height="17" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m12.6 12.6 4 4"/></svg>
@@ -35,10 +60,6 @@
         <kbd aria-hidden="true">/</kbd>
       </label>
       <label><span class="sr-only">Project</span><select id="project-filter"><option value="">All projects</option></select></label>
-      <label><span class="sr-only">Session status</span><select id="status-filter">
-        <option value="all">All states</option><option value="attention">Needs you</option>
-        <option value="working">Working</option><option value="resting">At rest</option>
-      </select></label>
       <label><span class="sr-only">Time window</span><select id="window-filter">
         <option value="live" selected>Live now</option><option value="1h">Last hour</option><option value="6h">Last 6 hours</option><option value="24h">Last 24 hours</option>
       </select></label>
@@ -46,8 +67,24 @@
       <button type="button" class="text-btn" id="reset-filters" hidden>Clear filters</button>
       <div id="sources" hidden><p>Show sessions from</p><div id="legend" role="group" aria-label="Activity sources"></div></div>
     </section>
-    <div class="workspace">
-      <section class="surface sessions" aria-labelledby="sessions-title">
+    <section class="standby" id="empty" aria-labelledby="empty-title">
+      <div class="standby-content">
+        <svg class="standby-symbol" viewBox="0 0 64 44" aria-hidden="true" fill="none" stroke="currentColor">
+          <path d="M2 25h18l5-12 7 21 5-9h13" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="51" cy="25" r="4" fill="currentColor" stroke="none"/><circle cx="51" cy="25" r="10" opacity=".25"/>
+        </svg>
+        <h2 id="empty-title" tabindex="-1" aria-live="polite">Connecting to the scanner</h2>
+        <p id="empty-message">Sessions will appear after the first scan.</p>
+        <div class="standby-actions">
+          <button type="button" id="empty-reset" hidden>Clear filters</button>
+          <button type="button" id="empty-history" hidden>Show last 24 hours</button>
+          <button type="button" id="empty-sources" aria-controls="sources" hidden>View sources</button>
+        </div>
+        <p id="last-session" hidden></p>
+      </div>
+    </section>
+    <div class="workspace" id="workspace" hidden>
+      <section class="surface sessions" id="session-pane" aria-labelledby="sessions-title">
         <header class="surface-head">
           <h2 id="sessions-title">Sessions</h2>
           <label><span class="sr-only">Sort sessions</span><select class="quiet-select" id="sort">
@@ -55,39 +92,41 @@
           </select></label>
         </header>
         <div class="board" id="board" role="group" aria-label="Sessions by project" hidden></div>
-        <div class="empty" id="empty">
-          <h3 id="empty-title">Connecting to the scanner</h3>
-          <p id="empty-message">Sessions will appear here after the first scan.</p>
-          <button type="button" id="empty-reset" hidden>Clear filters</button>
-        </div>
         <p class="board-note"><span class="tick-key" aria-hidden="true"></span>Each mark is a logged event, not time spent.</p>
       </section>
-      <aside class="surface inspector" id="detail" aria-labelledby="detail-title">
-        <header class="surface-head"><h2 id="detail-title" tabindex="-1">Session details</h2><button id="close-detail" class="icon-btn" aria-label="Close session details" title="Close (Esc)" hidden>×</button></header>
-        <p id="detail-placeholder">Select a session or stream event to inspect its activity.</p>
+      <div class="pane-divider" id="pane-divider" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Sessions pane width" aria-controls="session-pane" aria-valuemin="48" aria-valuemax="74" aria-valuenow="64" title="Drag or use arrow keys to resize; double-click to reset"></div>
+      <section class="surface feed" id="feed" aria-labelledby="feed-title">
+        <header class="surface-head"><h2 id="feed-title" tabindex="-1">Activity stream</h2><span class="head-note">Newest first</span></header>
+        <ol id="activity-log"></ol>
+        <p id="log-empty">Waiting for recorded events.</p>
+      </section>
+      <aside class="surface inspector" id="detail" aria-labelledby="detail-title" hidden>
+        <header class="surface-head"><h2 id="detail-title" tabindex="-1">Session details</h2><button id="close-detail" class="text-btn" title="Back to activity stream (Esc)">Back to stream</button></header>
         <div id="detail-body" hidden>
+          <section class="event-reading" id="event-reading" aria-label="Selected recorded event" hidden>
+            <div><strong id="event-kind"></strong><time id="event-time"></time></div>
+            <p id="event-description"></p>
+          </section>
           <div class="detail-summary">
             <span id="detail-status" class="state"></span>
             <h3 id="session-title"></h3>
             <p id="current-action"></p><p id="attention-note" hidden></p>
           </div>
-          <dl class="facts" id="facts"></dl>
           <div class="detail-actions"><button type="button" id="focus-agent" class="text-btn">Show in sessions</button><button type="button" id="copy-path" class="text-btn">Copy path</button></div>
           <p id="copy-status" role="status"></p>
+          <details class="session-facts"><summary>Session information</summary><dl class="facts" id="facts"></dl></details>
           <h3 class="events-title">Recent events</h3><ol class="recent" id="recent"></ol>
         </div>
       </aside>
     </div>
-    <section class="feed" aria-labelledby="feed-title">
-      <header class="surface-head"><h2 id="feed-title">Activity stream</h2><span class="head-note">Newest first</span></header>
-      <ol id="activity-log"></ol>
-      <p id="log-empty">Waiting for recorded events.</p>
-    </section>
-    <footer class="bottom"><span id="source-note">AgentTally reads local logs.</span><button class="text-btn" id="help-button">Dashboard guide <kbd>?</kbd></button></footer>
+    <footer class="bottom"><span id="source-note">AgentTally reads local logs.</span><span id="updated">No snapshot yet</span><button class="text-btn" id="help-button">Guide <kbd>?</kbd></button></footer>
   </main>
   <dialog id="help" aria-labelledby="guide-title">
     <header class="surface-head"><h2 id="guide-title">Dashboard guide</h2><button class="icon-btn" id="close-help" aria-label="Close guide">×</button></header>
-    <p>Projects needing an approval or a reply appear first by default. Indented sessions are sub-agents. Select a row or a stream event to inspect that session.</p>
+    <p>Hide Overview for more room. Drag the divider between sessions and the stream, or focus it and use the arrow keys. Double-click it to restore the default width. These layout choices are saved on this device.</p>
+    <p>Needs you lists approvals before replies. Select a request to inspect it without sending anything to the agent. When nothing needs you, this space shows working sessions instead.</p>
+    <p>Project signal groups recorded events into one-minute bars on a common scale. A gold bar includes a logged wait, not necessarily a pending request. Select a lane to filter by project; select it again to show all projects. Empty minutes mean no recorded events, not inactivity.</p>
+    <p>Select a session to inspect its latest action, or select a stream event to read that specific record alongside the current session. Back to stream or Esc returns you to the list. Indented sessions are sub-agents.</p>
     <p>Timelines share the same 30-minute window. Marks are recent recorded events; blank space is not a measure of idle time. The scanner reads a bounded part of each log.</p>
     <p>Filters apply to sessions and the stream. Live now includes active sessions and idle sessions seen in the last 15 minutes. Active sessions stay visible in every time window.</p>
     <p>Review permissions and reply in the original app. File-only sources report changes, not tool calls or token usage.</p>

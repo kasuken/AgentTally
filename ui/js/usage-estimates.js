@@ -2,6 +2,14 @@
 // Sources and omissions are documented in docs/usage-methodology.md.
 export const PRICE_VERSION = 'standard-usd-2026-11-24';
 export const FACTOR_VERSION = 'carbonbit-style-1.1.0';
+const inputWh = .00015;
+export const impactFactors = Object.freeze({ inputWh, outputWh: .0006, cacheReadWeight: .1, carbonGPerKwh: 480, waterLPerKwh: 1.1 });
+const tokenClasses = [
+  { key: 'input', label: 'Fresh input', wh: inputWh },
+  { key: 'output', label: 'Output', wh: impactFactors.outputWh },
+  { key: 'cache_read', label: 'Cache reads', wh: inputWh * impactFactors.cacheReadWeight },
+  { key: 'cache_write', label: 'Cache writes', wh: inputWh },
+];
 const prices = {
   'claude-sonnet-4': [3, 15, .3, 3.75],
   'claude-sonnet-4-5': [3, 15, .3, 3.75],
@@ -49,27 +57,35 @@ export function tokenTotal(row) {
   return ['input', 'output', 'cache_read', 'cache_write', 'unclassified'].reduce((sum, key) => sum + (row[key] ?? 0), 0);
 }
 export function estimate(models) {
-  let cost = 0, energy = 0, pricedTokens = 0, genericTokens = 0, tokens = 0;
+  let cost = 0, pricedTokens = 0, genericTokens = 0, unclassifiedTokens = 0;
+  const classes = tokenClasses.map(c => ({ ...c, tokens: 0, energy: 0 })), contributions = [];
   for (const row of models) {
-    const model = canonicalModel(row.name), price = Object.hasOwn(prices, model) ? prices[model] : null, count = tokenTotal(row);
-    tokens += count;
-    const values = [row.input ?? 0, row.output ?? 0, row.cache_read ?? 0, row.cache_write ?? 0];
-    if (price) values.forEach((value, i) => {
-      if (price[i] !== null) { cost += value * price[i] / 1e6; pricedTokens += value; }
+    const model = canonicalModel(row.name), price = Object.hasOwn(prices, model) ? prices[model] : null;
+    const generic = !price && !model.startsWith('gemini-');
+    const multiplier = generic ? 1 : /haiku|mini|nano|flash|luna/.test(model) ? .25 : /opus|fable|mythos|astra/.test(model) ? 3 : 1;
+    let classified = 0, energy = 0;
+    classes.forEach((c, i) => {
+      const value = row[c.key] ?? 0, wh = value * c.wh * multiplier;
+      classified += value;
+      energy += wh;
+      c.tokens += value;
+      c.energy += wh;
+      if (price && price[i] !== null) { cost += value * price[i] / 1e6; pricedTokens += value; }
     });
     if (price && model.startsWith('claude-')) {
-      cost += Math.min(row.cache_write_1h ?? 0, values[3]) * (price[0] * 2 - price[3]) / 1e6;
+      cost += Math.min(row.cache_write_1h ?? 0, row.cache_write ?? 0) * (price[0] * 2 - price[3]) / 1e6;
     }
-    const known = Boolean(price) || /^(gemini-)/.test(model);
-    const multiplier = /haiku|mini|nano|flash|luna/.test(model) ? .25 : /opus|fable|mythos|astra/.test(model) ? 3 : 1;
-    if (!known) genericTokens += values.reduce((a, b) => a + b, 0);
-    energy += ((values[0] + values[2] * .1 + values[3]) * .00015 + values[1] * .0006) * (known ? multiplier : 1);
+    unclassifiedTokens += row.unclassified ?? 0;
+    if (generic) genericTokens += classified;
+    contributions.push({ name: row.name, generic, multiplier, classified, energy: classified ? energy : null });
   }
+  const classifiedTokens = classes.reduce((sum, c) => sum + c.tokens, 0);
+  const energy = classifiedTokens ? classes.reduce((sum, c) => sum + c.energy, 0) : null;
   return {
-    cost: pricedTokens > 0 ? cost : null,
-    energy: models.some(row => tokenTotal(row) - (row.unclassified ?? 0) > 0) ? energy : null,
-    carbon: models.some(row => tokenTotal(row) - (row.unclassified ?? 0) > 0) ? energy / 1000 * 480 : null,
-    water: models.some(row => tokenTotal(row) - (row.unclassified ?? 0) > 0) ? energy * 1.1 : null,
-    tokens, pricedTokens, genericTokens,
+    cost: pricedTokens > 0 ? cost : null, energy,
+    carbon: energy === null ? null : energy / 1000 * impactFactors.carbonGPerKwh,
+    water: energy === null ? null : energy * impactFactors.waterLPerKwh,
+    tokens: classifiedTokens + unclassifiedTokens, classifiedTokens, unclassifiedTokens, pricedTokens, genericTokens, classes,
+    models: contributions.sort((a, b) => (b.energy ?? 0) - (a.energy ?? 0)),
   };
 }

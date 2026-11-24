@@ -1,10 +1,13 @@
 import { Board, projectKey } from "./board.js";
+import { SignalDeck } from "./signal-deck.js";
+import { setupWorkspaceLayout } from "./workspace-layout.js";
 import { providerMeta, STATUS_TEXT, describe, sessionAction, fileActivityOnly, escapeHtml as esc } from "./meta.js";
-import { WINDOWS, selectSessions, sortSessions, needsAttention, inWindow, streamEvents } from "./selectors.js";
+import { WINDOWS, selectSessions, matchesStatus, needsAttention, inWindow, streamEvents, livePresentation } from "./selectors.js";
 
 const $ = (id) => document.getElementById(id);
 const load = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
 const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Preferences are optional. */ } };
+setupWorkspaceLayout(load, save);
 const params = new URLSearchParams(location.search);
 const tauri = window.__TAURI__;
 const demo = params.has("demo") || (!tauri && !params.has("live"));
@@ -18,9 +21,9 @@ const state = {
   window: Object.hasOwn(WINDOWS, windowPref) ? windowPref : "live",
   sort: ["attention", "recent", "project"].includes(sortPref) ? sortPref : "attention",
   hidden: new Set(Array.isArray(hiddenPref) ? hiddenPref.filter((x) => typeof x === "string") : []),
-  query: "", project: "", status: "all", selected: null, dismissed: false, opener: null,
+  query: "", project: "", status: "all", selected: null, selectedEvent: null, opener: null,
 };
-// A visit to Usage should not clear the current drill-down. Unlike durable
+// Visiting a report should not clear the current drill-down. Unlike durable
 // source/time preferences, this handoff lives only in the same tab and mode.
 try {
   const previous = JSON.parse(sessionStorage.getItem(returnKey));
@@ -28,11 +31,11 @@ try {
   if (previous) {
     for (const key of ["query", "project", "selected"]) if (typeof previous[key] === "string") state[key] = previous[key];
     if (["all", "attention", "working", "resting"].includes(previous.status)) state.status = previous.status;
-    state.dismissed = previous.dismissed === true;
     $("search").value = state.query;
   }
 } catch { /* Per-tab storage is optional. */ }
 const board = new Board($("board"), choose);
+const deck = new SignalDeck(choose, (key) => { state.project = key; refresh(); });
 const cache = new WeakMap();
 const clock = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
 const exactTime = (ts) => new Date(ts).toLocaleString();
@@ -44,28 +47,32 @@ const html = (el, markup) => {
 const timestamp = (ts) => `<time datetime="${new Date(ts).toISOString()}" title="${esc(exactTime(ts))}">${esc(clock.format(ts))}</time>`;
 const now = () => state.snap ? state.snap.now + Math.max(0, Date.now() - state.received) : Date.now();
 const stale = () => state.error || (state.snap && (Date.now() - state.received > staleMs || Date.now() - state.snap.now > staleMs));
-const hasFilters = () => !!(state.query || state.project || state.hidden.size || state.status !== "all" || state.window !== "live");
+const hasFilters = () => !!(state.query.trim() || state.project || state.hidden.size || state.status !== "all" || state.window !== "live");
 
-function choose(key, opener) {
+const streamRecords = new WeakMap();
+const eventLabels = { tool: "Tool call", wait: "Wait recorded", reply: "Agent reply", think: "Thinking", user: "User message", done: "Turn complete", error: "Error" };
+
+function choose(key, opener, event = null) {
   state.selected = key;
-  state.dismissed = false;
+  state.selectedEvent = event;
   state.opener = opener;
   board.select(key);
   renderDetail();
-  if (matchMedia("(max-width: 850px)").matches || opener?.closest("#activity-log")) {
-    $("detail-title").focus({ preventScroll: true });
-    $("detail").scrollIntoView({ block: "nearest" });
-  }
+  $("detail-title").focus({ preventScroll: true });
+  $("detail").scrollIntoView({ block: "nearest" });
 }
 
 function closeDetail() {
   if (!state.selected) return;
   const key = state.selected;
+  const fromStream = !!state.selectedEvent;
   state.selected = null;
-  state.dismissed = true;
+  state.selectedEvent = null;
   board.select(null);
   renderDetail();
-  if (state.opener?.isConnected) state.opener.focus();
+  renderStream();
+  if (state.opener?.isConnected && !state.opener.closest("[hidden]")) state.opener.focus();
+  else if (fromStream) $("feed-title").focus();
   else board.focus(key);
 }
 
@@ -89,7 +96,8 @@ function renderConnection() {
   text(badge, failed ? `${source} · interrupted` : !state.snap ? "Connecting" : source);
   text($("source-note"), demo || state.fixture ? `${source}. Sample data only; no local logs connected.` : "Local activity only. No data leaves this machine.");
   text($("updated"), state.snap ? `Snapshot at ${clock.format(state.snap.now)}${failed ? " · stale" : ""}` : "No snapshot yet");
-  $("connection-warning").hidden = !failed;
+  $("connection-warning").hidden = !failed || !$("empty").hidden;
+  if (!state.snap && failed) text($("overview-summary"), "No snapshot available.");
   if (failed) text($("connection-warning"), state.snap ? "Updates interrupted. Showing the last snapshot while the connection recovers." :
     `Scanner disconnected. Retrying automatically.${!tauri && !demo && !state.fixture ? " Browser live mode needs a running snapshot server." : ""}`);
 }
@@ -99,18 +107,13 @@ function renderSummary() {
   const approvals = sessions.filter((s) => s.status === "blocked").length;
   const replies = sessions.filter((s) => s.status === "waiting").length;
   const counts = `${plural(sessions.length, "session")} across ${plural(new Set(sessions.map(projectKey)).size, "project")}.`;
-  const urgent = [
-    approvals && `${approvals} ${approvals === 1 ? "needs" : "need"} approval`,
-    replies && `${replies} ${replies === 1 ? "needs" : "need"} a reply`,
-  ].filter(Boolean).join("; ");
-  text($("overview-summary"), `${counts}${urgent ? ` ${urgent}.` : ""}`);
+  text($("overview-summary"), counts);
   document.title = `${approvals + replies ? `(${approvals + replies}) ` : ""}Live activity · AgentTally`;
 }
 
 function renderFilters() {
   $("window-filter").value = state.window;
   $("sort").value = state.sort;
-  $("status-filter").value = state.status;
   $("reset-filters").hidden = !hasFilters();
   text($("sources-button"), state.hidden.size ? `Sources (${state.hidden.size} hidden)` : "Sources");
   if (!state.snap) return;
@@ -140,9 +143,18 @@ function renderFilters() {
 let detailKey = null;
 function renderDetail() {
   const s = state.visible.find((v) => v.key === state.selected);
-  $("detail-body").hidden = $("close-detail").hidden = !s;
-  $("detail-placeholder").hidden = !!s;
+  $("detail").hidden = $("detail-body").hidden = !s;
+  $("feed").hidden = !!s;
   if (!s) { detailKey = null; return; }
+  const event = state.selectedEvent;
+  text($("detail-title"), event ? "Recorded event" : "Session details");
+  $("event-reading").hidden = !event;
+  if (event) {
+    text($("event-kind"), eventLabels[event.kind] || "Event");
+    text($("event-time"), exactTime(event.ts));
+    $("event-time").dateTime = new Date(event.ts).toISOString();
+    text($("event-description"), describe(event));
+  }
   const scroll = detailKey === s.key ? $("detail-body").scrollTop : 0;
   if (s.key !== detailKey) text($("copy-status"), "");
   detailKey = s.key;
@@ -174,50 +186,93 @@ function renderDetail() {
 }
 
 function renderStream() {
+  if (state.selected) return;
   const list = $("activity-log");
   const rows = streamEvents(state.visible);
   const existing = new Map([...list.children].map((node) => [node.dataset.row, node]));
   const active = document.activeElement, scroll = list.scrollTop;
+  // Keep the event being read in place when new entries arrive above it.
+  const anchor = scroll > 0 && !list.closest("[hidden]") ?
+    [...list.children].find((row) => row.getBoundingClientRect().bottom > list.getBoundingClientRect().top) : null;
+  const top = anchor?.getBoundingClientRect().top;
   rows.forEach(({ key, s, e }, i) => {
     let node = existing.get(key);
     existing.delete(key);
     if (!node) { node = document.createElement("li"); node.dataset.row = key; node.append(document.createElement("button")); }
     const b = node.firstElementChild;
+    streamRecords.set(b, e);
     b.type = "button"; b.dataset.key = s.key;
     b.setAttribute("aria-controls", "detail");
     b.title = `${s.title}: ${describe(e)}`;
-    html(b, `${timestamp(e.ts)}<span class="who"><strong>${esc(providerMeta(s.provider).name)}</strong><small>${esc(s.project)}</small></span><span class="what">${esc(describe(e))}</span>`);
+    html(b, `${timestamp(e.ts)}<span class="stream-entry"><span class="who"><strong>${esc(providerMeta(s.provider).name)}</strong><small>${esc(s.project)}</small></span><span class="what">${esc(describe(e))}</span></span>`);
     if (list.children[i] !== node) list.insertBefore(node, list.children[i] || null);
   });
   for (const node of existing.values()) node.remove();
   if (active?.isConnected && active !== document.activeElement) active.focus({ preventScroll: true });
-  list.scrollTop = scroll;
+  if (anchor?.isConnected) list.scrollTop += anchor.getBoundingClientRect().top - top;
+  else list.scrollTop = scroll;
   $("log-empty").hidden = !!rows.length;
+  if (!rows.length) text($("log-empty"), "No detailed events in this view.");
 }
 
-function renderEmpty() {
-  $("empty").hidden = !!state.visible.length;
-  if (state.visible.length) return;
-  const noData = !state.snap;
-  const filtered = !!state.snap?.sessions.length;
-  text($("empty-title"), noData ? stale() ? "Scanner unavailable" : "Connecting to the scanner" : filtered ? "No matching sessions" : "No sessions recorded");
-  text($("empty-message"), noData ? "Sessions will appear here after the first successful scan." : filtered ?
-    "Try a different time window, project, source or search." :
-    demo || state.fixture ? "This sample snapshot contains no sessions." : "Start a session in a supported agent. It will appear after its log is discovered.");
-  $("empty-reset").hidden = !filtered || !hasFilters();
+function renderEmpty(mode, at, focus) {
+  const empty = mode !== "sessions";
+  $("main").classList.toggle("empty-workspace", empty);
+  $("empty").hidden = !empty;
+  $("workspace").hidden = empty;
+  if (!empty) {
+    if ($("empty").contains(focus)) board.focus();
+    return;
+  }
+  const recent = mode === "standby" ? state.snap.sessions.reduce((latest, s) =>
+    s.lastTs > 0 && inWindow(s, "24h", at) && (!latest || s.lastTs > latest.lastTs) ? s : latest, null) : null;
+  const copy = {
+    standby: ["Standing by for activity", demo || state.fixture
+      ? "No live sessions in this sample. New activity will appear here automatically."
+      : recent ? "AgentTally is watching local logs. New activity will appear here automatically."
+      : "Start a task in Claude Code, Codex, or another supported agent. Its activity will appear here as soon as AgentTally picks up the log."],
+    "no-results": ["No matching sessions", "Try a different project, source, search or time window."],
+    connecting: ["Connecting to the scanner", "Sessions will appear after the first scan."],
+    unavailable: ["Scanner unavailable", !tauri && !demo && !state.fixture ? "Browser live mode needs a running snapshot server. Retrying automatically." : "No snapshot is available yet. Retrying automatically."],
+    stale: ["Updates interrupted", "There were no matching sessions in the last snapshot. Retrying automatically."],
+  };
+  const [title, message] = copy[mode];
+  $("empty").dataset.state = mode;
+  text($("empty-title"), title);
+  text($("empty-message"), message);
+  $("empty-history").hidden = !recent;
+  $("empty-sources").hidden = mode !== "standby" || !!recent;
+  $("last-session").hidden = !recent;
+  if (recent) text($("last-session"), `Last seen: ${recent.project} · ${exactTime(recent.lastTs)}`);
+  $("empty-reset").hidden = mode !== "no-results";
+  if (!focus.isConnected || $("workspace").contains(focus) || focus === $("toggle-overview") ||
+      $("overview").contains(focus) || ($("empty").contains(focus) && focus.hidden)) $("empty-title").focus({ preventScroll: true });
 }
 
 function refresh() {
+  const focus = document.activeElement;
+  const at = stale() && state.snap ? state.snap.now : now();
+  const scope = state.snap ? selectSessions(state.snap.sessions, { ...state, status: "all", project: "" }, at) : [];
+  const projectScope = state.project ? scope.filter((s) => projectKey(s) === state.project) : scope;
+  const mapSessions = scope.filter((s) => matchesStatus(s, state.status));
+  state.visible = state.project ? mapSessions.filter((s) => projectKey(s) === state.project) : mapSessions;
+  for (const button of $("status-lenses").children) {
+    const status = button.dataset.status;
+    button.setAttribute("aria-pressed", String(state.status === status));
+    text(button.lastElementChild, state.snap ? String(projectScope.filter((s) => matchesStatus(s, status)).length) : "–");
+  }
+  const mode = livePresentation(state.snap, state.visible, { filtered: hasFilters(), interrupted: stale() });
+  if (mode === "sessions") deck.render({ sessions: state.visible, mapSessions, at, project: state.project,
+    connected: !stale(), hasSnapshot: !!state.snap, filtered: hasFilters() });
   if (state.snap) {
-    const at = now();
-    state.visible = selectSessions(state.snap.sessions, state, at);
     if (!state.visible.some((s) => s.key === state.selected)) {
-      state.selected = state.dismissed ? null : sortSessions(state.visible)[0]?.key || null;
+      state.selected = null;
+      state.selectedEvent = null;
     }
     board.render(state.visible, state.selected, state.sort, at);
     renderSummary(); renderDetail(); renderStream();
   }
-  renderFilters(); renderEmpty(); renderConnection();
+  renderFilters(); renderEmpty(mode, at, focus); renderConnection();
 }
 
 function resetFilters() {
@@ -238,11 +293,22 @@ $("legend").onclick = (e) => {
 };
 $("search").oninput = (e) => { state.query = e.target.value; refresh(); };
 $("project-filter").onchange = (e) => { state.project = e.target.value; refresh(); };
-$("status-filter").onchange = (e) => { state.status = e.target.value; refresh(); };
+$("status-lenses").onclick = (e) => {
+  const button = e.target.closest("button[data-status]");
+  if (button) { state.status = button.dataset.status; refresh(); }
+};
 $("window-filter").onchange = (e) => { state.window = e.target.value; save("tally.window", state.window); refresh(); };
 $("sort").onchange = (e) => { state.sort = e.target.value; save("tally.sort", state.sort); refresh(); };
 $("reset-filters").onclick = $("empty-reset").onclick = resetFilters;
-$("activity-log").onclick = (e) => { const b = e.target.closest("button"); if (b) choose(b.dataset.key, b); };
+$("empty-history").onclick = () => {
+  state.window = "24h"; save("tally.window", state.window);
+  refresh(); $("window-filter").focus();
+};
+$("empty-sources").onclick = () => {
+  if ($("sources").hidden) $("sources-button").click();
+  $("sources-button").focus();
+};
+$("activity-log").onclick = (e) => { const b = e.target.closest("button"); if (b) choose(b.dataset.key, b, streamRecords.get(b)); };
 $("close-detail").onclick = closeDetail;
 $("focus-agent").onclick = () => board.focus(state.selected);
 $("copy-path").onclick = async () => {
@@ -265,14 +331,17 @@ addEventListener("keydown", (e) => {
 });
 
 const modeQuery = demo ? "?demo" : params.has("live") ? "?live" : "";
-$("usage-link").href = `usage.html${modeQuery}`;
-$("usage-link").addEventListener("click", (event) => {
+function rememberLiveView(event) {
   if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-  const { query, project, status, selected, dismissed } = state;
-  try { sessionStorage.setItem(returnKey, JSON.stringify({ query, project, status, selected, dismissed })); } catch { /* Optional. */ }
-});
+  const { query, project, status, selected } = state;
+  try { sessionStorage.setItem(returnKey, JSON.stringify({ query, project, status, selected })); } catch { /* Optional. */ }
+}
+for (const link of [$("usage-link"), $("impact-link")]) {
+  link.href = link.getAttribute("href") + modeQuery;
+  link.addEventListener("click", rememberLiveView);
+}
 document.querySelector('nav a[aria-current="page"]').href = `index.html${modeQuery}`;
-function failed() { state.error = true; renderEmpty(); renderConnection(); }
+function failed() { state.error = true; refresh(); }
 async function start() {
   refresh();
   if (demo) {

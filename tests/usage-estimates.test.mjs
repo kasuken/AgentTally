@@ -38,3 +38,31 @@ test('model matching strips only known prefixes and snapshots, not unknown famil
   assert.equal(estimate([{ name: '__proto__', output: 10 }]).cost, null);
   assert.equal(estimate([{ name: 'gpt-5-mini', output: 1000 }]).cost, .002);
 });
+
+test('energy reconciles by class and by model after weighting each model separately', () => {
+  const r = estimate([
+    { name: 'gpt-5-mini', output: 1000, cache_write: 1000 },
+    { name: 'unrecognized-mini', input: 1000, unclassified: 100 },
+    { name: 'claude-opus-4', input: 1000, cache_read: 1000 },
+    { name: 'unknown-no-split', unclassified: 500 },
+  ]);
+  const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-10, `${actual} vs ${expected}`);
+  assert.deepEqual([r.tokens, r.classifiedTokens, r.unclassifiedTokens, r.genericTokens, r.pricedTokens], [5600, 5000, 600, 1000, 3000]);
+  assert.deepEqual(r.classes.map(c => c.tokens), [2000, 1000, 1000, 1000]);
+  r.classes.forEach((c, i) => near(c.energy, [.6, .15, .045, .0375][i]));
+  assert.deepEqual(r.models.map(m => [m.name, m.multiplier, m.generic]), [
+    ['claude-opus-4', 3, false], ['gpt-5-mini', .25, false], ['unrecognized-mini', 1, true], ['unknown-no-split', 1, true],
+  ]);
+  assert.equal(r.models.at(-1).energy, null);
+  near(r.energy, .8325);
+  near(r.models.reduce((sum, m) => sum + (m.energy ?? 0), 0), r.energy);
+  near(r.water, .91575);
+  near(r.carbon, .3996);
+});
+
+test('recognized unpriced family uses its footprint class without inventing a price', () => {
+  const r = estimate([{ name: 'gemini-2.5-flash', output: 1000 }]);
+  assert.equal(r.cost, null);
+  assert.equal(r.genericTokens, 0);
+  assert.equal(r.models[0].multiplier, .25);
+});

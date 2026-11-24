@@ -1,0 +1,61 @@
+.signal-deck {
+  --deck: #182b4b;
+  --light: #f4f7ff;
+  --muted: #bacbe1;
+  --signal: #93befb;
+  display: grid;
+  grid-template-columns: minmax(0, .94fr) minmax(0, 1.06fr);
+  color: var(--light);
+  background: var(--deck);
+  overflow: hidden;
+}
+.priority, .signal-map { min-width: 0; padding: 16px var(--inset); }
+.priority { background: var(--surface); color: var(--ink); }
+.signal-deck header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
+.signal-deck h2 { font-size: clamp(20px, 1.65vw, 25px); letter-spacing: -.035em; }
+#priority-count, #priority-empty { color: var(--sub); font-size: 13px; }
+#priority-empty { padding-block: 16px; }
+#priority-list { max-height: 165px; overflow-y: auto; scrollbar-width: thin; }
+.queue-row { min-width: 0; width: 100%; min-height: 49px; display: grid; grid-template-columns: 76px minmax(0, 1fr) 1em; align-items: center; gap: 10px; text-align: start; padding: 7px 4px; background: transparent; border: 0; border-top: 1px solid var(--line); border-radius: 0; }
+.queue-row:hover, .queue-row:focus-visible { background: var(--wash); }
+.queue-row:focus-visible { outline-offset: -3px; }
+.queue-type { display: inline-flex; gap: 8px; align-items: center; font-size: 12px; font-weight: 650; color: var(--teal); }
+.queue-type::before { content: ""; width: 8px; height: 8px; background: currentColor; border-radius: 50%; flex: none; }
+.queue-row.blocked .queue-type { color: var(--amber); }
+.blocked .queue-type::before { transform: rotate(45deg); border-radius: 2px; }
+.queue-row.waiting .queue-type { color: #5d4a86; }
+.waiting .queue-type::before { border: 1.5px solid currentColor; background: none; border-radius: 2px; }
+.queue-copy strong, .queue-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-copy strong { font-size: 15px; font-weight: 630; }
+.queue-copy small { color: var(--sub); font-size: 12px; }
+.queue-go { color: var(--sub); font-size: 16px; }
+.signal-map { --lane-cols: minmax(60px, .8fr) minmax(75px, 2.6fr) 3.5ch; background: #11223d; }
+.signal-map :focus-visible { outline-color: #c4dbff; }
+#signal-range, .signal-caption, #signal-empty, .signal-axis, .lane-total { color: var(--muted); font-size: 12px; }
+.signal-caption { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; }
+#signal-wait-key::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; background: #ffd089; }
+.signal-lanes { max-height: 124px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #566f91 transparent; }
+.signal-lane, .signal-axis { display: grid; grid-template-columns: var(--lane-cols); gap: 10px; align-items: center; width: 100%; padding-inline: 4px; }
+.signal-lane { min-height: 30px; border: 0; border-radius: 3px; background: transparent; padding-block: 2px; color: #e6eefc; text-align: left; font-size: 13px; }
+.signal-lane:hover, .signal-lane[aria-pressed="true"] { background: #2a4162; }
+.signal-lane[aria-pressed="true"] .lane-name { text-decoration: underline; text-underline-offset: 3px; font-weight: 650; }
+.signal-lane:focus-visible { outline-offset: -2px; }
+.lane-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lane-total, .signal-axis > :last-child { text-align: right; }
+.lane-bars {
+  height: 24px; display: grid; grid-template-columns: repeat(30, 1fr); gap: 2px; align-items: end;
+  background: repeating-linear-gradient(90deg, #3a4c693d 0 1px, transparent 1px calc(100% / 6));
+  border-bottom: 1px solid #465a79;
+}
+.lane-bars i { display: block; background: var(--signal); border-radius: 1px 1px 0 0; }
+.signal-lane[aria-pressed="true"] .lane-bars i { background: #bddeff; }
+.lane-bars i.has-wait, .signal-lane[aria-pressed="true"] .lane-bars i.has-wait { background: #ffd089; }
+.signal-axis { font-size: 10px; padding-top: 4px; }
+.signal-axis div { display: flex; justify-content: space-between; }
+#signal-empty { padding-block: 18px; }
+@media (max-width: 720px) {
+  .signal-deck { grid-template-columns: 1fr; }
+  .priority, .signal-map { padding: 15px 18px; }
+  .signal-lanes { max-height: 120px; }
+  .queue-row { grid-template-columns: 65px minmax(0,1fr) 1em; gap: 6px; }
+}

@@ -1,20 +1,18 @@
-## Live agent activity, at a glance
+## See which agents need you
 
-AgentTally now opens to the question that matters when several agents are running: **which one needs me?** The dashboard groups sessions by project, shows each agent’s latest action, and puts permission requests and replies ahead of background work.
+The **Needs you** queue puts approvals ahead of replies. Select a project’s activity lane to filter its sessions, or select an event to read it while new events continue arriving. Resize the sessions and activity panes or hide the overview; AgentTally remembers your layout.
 
-![Demo dashboard: Copilot CLI needs approval to run webhook tests while Codex traces retry handling](https://raw.githubusercontent.com/kasuken/AgentTally/v0.5.0/docs/screenshots/live-activity.png)
+![Demo live workspace with a pending approval, project activity lanes and a timestamped event stream](https://raw.githubusercontent.com/kasuken/AgentTally/v0.6.0/docs/screenshots/live-workspace.png)
 
-Each mark on the shared 30-minute timeline is a logged event, not time spent. Select a session to see its model, branch, and recent actions. Minimize the dashboard and a compact status window keeps the highest-priority session visible. Approvals and replies still happen in the original agent app.
+When no agents are active, **Standing by for activity** replaces the empty panels. Open the last 24 hours if there’s history, or leave the scanner watching; the live workspace returns automatically. On Windows, minimizing to compact status now keeps a single taskbar entry.
 
-## Where did the tokens go?
+## Put the footprint in everyday terms
 
-Open **Usage** to compare today, the last 7 days, or the last 30 days. See reported tokens by model and provider, tool calls by category, and how much of the total has enough information for a cost or footprint estimate.
+Open **Impact** for the same period as **Usage**. All nine comparisons are visible together, with their reference amounts. In the example below, 52 Wh is about 5.2 hours of LED light, 2.8 phone charges, **or** 44% of a kettle boil. Those are three ways to describe one estimate, not three impacts to add together.
 
-![Seven-day demo usage report showing token classes alongside estimated API cost, energy, emissions, and cooling water](https://raw.githubusercontent.com/kasuken/AgentTally/v0.5.0/docs/screenshots/ai-usage.png)
+![Seven-day demo Impact report with energy, emissions and cooling water totals alongside all nine everyday equivalents](https://raw.githubusercontent.com/kasuken/AgentTally/v0.6.0/docs/screenshots/impact-workspace.png)
 
-Both screenshots use sample data. Your history is indexed on your device from logs that are still available. No account or API key is needed. Cost is an **API-equivalent estimate**, not your bill; environmental figures are estimates, not measurements. [How the estimates work](https://github.com/kasuken/AgentTally/blob/v0.5.0/docs/usage-methodology.md).
-
-**Upgrading from v0.4.0:** Install the new version normally. The dashboard replaces Pixel (including Cinema mode) and Pro, and the compact status window replaces the robot. No manual migration is required.
+Both screenshots use simulated data. The installed app uses local logs. Environmental figures are estimates, not measurements; expand **Energy by token class** to inspect the inputs, or read [how the estimates work](https://github.com/kasuken/AgentTally/blob/v0.6.0/docs/usage-methodology.md).
 
 ## Downloads
 
@@ -25,4 +23,4 @@ Both screenshots use sample data. Your history is indexed on your device from lo
 | macOS (Intel) | `AgentTally_*_x64.dmg` |
 | Linux | `AgentTally_*_amd64.AppImage`, `AgentTally_*_amd64.deb` or `AgentTally-*.x86_64.rpm` |
 
-The builds are not code-signed yet. See the [install guide](https://github.com/kasuken/AgentTally/blob/v0.5.0/README.md#install) for Windows and macOS instructions.
+The builds are not code-signed. See the [install guide](https://github.com/kasuken/AgentTally/blob/v0.6.0/README.md#install) for Windows and macOS instructions.

@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.6.0] - 2026-11-24
+
+### Added
+
+- **Attention queue and project activity** — See which sessions need approval or a reply. Select a project’s activity lane to filter the workspace, or select a stream event to inspect it without losing your place as new events arrive.
+- **Impact report** — See all nine everyday comparisons together: lighting, charging and boiling for energy; travel distances for emissions; and mugs, showers and washer loads for cooling water. Each group describes the same estimate three ways. Inspect the reference amounts, model contributions and token coverage behind the figures.
+
+### Changed
+
+- **Desktop workspace** — Move between Live activity, Usage and Impact from the navigation rail. Resize the sessions and activity panes or hide the overview; the app remembers your layout. Usage and Impact share a reporting period without changing the live view.
+- **Standby when agents are quiet** — Instead of several empty panels, see whether the scanner is watching and open the last 24 hours when history is available. The live workspace returns as soon as activity resumes.
+
+### Fixed
+
+- **One Windows taskbar entry** — Minimizing to compact status no longer adds a second taskbar button.
+
+### Screenshots
+
+Both views use simulated data, not local agent history.
+
+![Live workspace showing a pending approval, project activity lanes and the event stream](docs/screenshots/live-workspace.png)
+
+![Impact report showing the energy, emissions and water estimates with all nine everyday comparisons](docs/screenshots/impact-workspace.png)
+
 ## [0.5.0] - 2026-11-24
 
 ### Added

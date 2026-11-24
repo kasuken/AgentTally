@@ -3,6 +3,14 @@ import { providerMeta } from "./meta.js";
 export const WINDOWS = { live: 15 * 60e3, "1h": 3600e3, "6h": 6 * 3600e3, "24h": 24 * 3600e3 };
 export const needsAttention = (s) => s.status === "blocked" || s.status === "waiting";
 export const isResting = (s) => ["idle", "sleeping", "offline"].includes(s.status);
+export function livePresentation(snapshot, visible, { filtered, interrupted }) {
+  if (!snapshot) return interrupted ? "unavailable" : "connecting";
+  if (visible.length) return "sessions";
+  if (interrupted) return "stale";
+  return filtered ? "no-results" : "standby";
+}
+export const matchesStatus = (s, status) => status === "all" ||
+  (status === "attention" ? needsAttention(s) : status === "resting" ? isResting(s) : s.status === status);
 export function inWindow(s, window, now) {
   const active = s.status === "working" || needsAttention(s);
   return (active || now - s.lastTs < (WINDOWS[window] || WINDOWS["6h"])) &&
@@ -13,7 +21,7 @@ export function selectSessions(sessions, filters, now) {
   return sessions.filter((s) => !filters.hidden.has(s.provider) && inWindow(s, filters.window, now))
     .filter((s) => !filters.project || (s.cwd || s.project) === filters.project)
     .filter((s) => !query || [s.title, s.project, s.cwd, s.provider, providerMeta(s.provider).name, s.client, s.model].filter(Boolean).join(" ").toLocaleLowerCase().includes(query))
-    .filter((s) => filters.status === "all" || (filters.status === "attention" ? needsAttention(s) : filters.status === "resting" ? isResting(s) : s.status === filters.status));
+    .filter((s) => matchesStatus(s, filters.status));
 }
 export function sortSessions(sessions, sort = "attention") {
   const order = { blocked: 0, waiting: 1, working: 2, idle: 3, sleeping: 4, offline: 5 };

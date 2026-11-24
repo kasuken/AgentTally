@@ -1,10 +1,12 @@
 # Local usage and estimates
 
 AgentTally reads retained local logs, not account billing APIs. All history stays on
-this device. The Usage view is independent of the live scanner, its filters and its
-24-hour discovery window. Nothing is sent to a server, and no upstream package is
-installed or invoked. Browser previews cannot read history; `usage.html?demo`
-explicitly uses invented data.
+this device. Usage and Impact independently request the same local `usage_summary`;
+neither needs the live scanner, its filters or its 24-hour discovery window.
+Nothing is sent to a server, and no upstream package is installed or invoked.
+Browser previews cannot read history; `usage.html?demo` and `impact.html?demo`
+explicitly use invented data. The two workspaces share a reporting period: their
+links carry `days=1`, `7` or `30` and keep the current `demo` or `live` flag.
 
 ## Periods and coverage
 
@@ -101,6 +103,8 @@ taxes, service/tool fees, negotiated contracts and historical price changes are 
 modeled. Unknown models and unclassified counts are excluded. UI coverage shows
 the priced known subtotal and its token denominator; it never fills unknown
 models with a fabricated price. Rates are bundled, not fetched at runtime.
+The Usage workspace shows this subtotal. Prices play no role in the energy,
+emissions or cooling-water calculation.
 
 ## Environmental factors
 
@@ -117,9 +121,21 @@ onSiteCoolingWaterMl = energyWh * 1.1
 Small model names (Haiku, mini, nano, Flash, Luna) use 0.25x; frontier names
 (Opus, Fable, Mythos, Astra) use 3x; other known names use the medium 1x anchor.
 Class membership is a visualization/modeling assumption, not a scientific hardware
-classification. Unknown models use the medium generic anchor, explicitly counted
+classification. The bundled classifier recognizes price-table entries and
+`gemini-` model names; recognition for footprint modeling does not imply a price.
+Unknown models use the medium generic anchor, explicitly counted
 in generic coverage. Unclassified counts are excluded. Missing classes produce
 only a labeled known subtotal, not a whole-request claim.
+
+The Impact report applies each model's multiplier to each of its four classified
+token counts before summing. Its energy band divides that same subtotal by token
+class; the model table ranks contributions to that subtotal, not model
+efficiency. For example, 1,000 reported output tokens at the small 0.25× factor
+contribute 0.15 Wh, the same modeled energy as 1,000 fresh input tokens at 1×.
+Carbon and cooling water are conversions of the unrounded energy subtotal, not
+separate measurements. Values display at up to two significant digits, switching
+from Wh/g/mL to kWh/kg/L at 1,000. An absent class is not shown as a measured
+zero; if there are no positive classified counts, no footprint is displayed.
 
 The anchor infers per-token energy from a roughly 0.3 Wh query with 500 output
 tokens, assumes a 4:1 output/input energy ratio, and includes data-center overhead.
@@ -140,6 +156,20 @@ Token totals are stored, not precomputed estimate amounts. Current bundled versi
 tables are applied at query presentation, so a future table update intentionally
 recalculates the same retained history; versions are available in the methodology
 disclosure alongside detailed import coverage.
+
+### Everyday comparisons
+
+The Impact page divides each **unrounded known subtotal** by a reference amount
+from [CarbonBit methodology 1.1.0](https://github.com/kasuken/vscode-carbonbit/blob/4f4cab14c1cd6baf5a12860c7409926cc87cf02d/docs/METHODOLOGY.md#everyday-comparisons-v110).
+Alternatives within a row describe the same footprint; they are not additive.
+They do not represent actual trips, household consumption, or avoided emissions.
+When no footprint can be estimated, no comparison is displayed.
+
+| Footprint quantity | References used for comparison |
+| --- | --- |
+| Inference energy (Wh) | A 10 W lamp uses 10 Wh per hour by definition; [19 Wh per phone charge](https://www.epa.gov/energy/greenhouse-gas-equivalencies-calculator-calculations-and-references); [120 Wh per litre boiled](https://www.energimyndigheten.se/globalassets/energieffektivisering_/lagar-och-krav/ekodesign--energimarkning/ecodesign_kettles_task_3_20201218_v27_final.pdf). |
+| Emissions (g CO₂e) | [UK 2025 conversion factors](https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025): 162.72 g per petrol car-km (tailpipe only), 35.46 g per national rail passenger-km, or 125.76 g per short-haul economy passenger-km including radiative forcing. These comparisons exclude fuel production. |
+| On-site water (mL) | A 250 mL mug (CarbonBit assumption); [8.4 L per shower minute](https://www.epa.gov/sites/default/files/2017-01/documents/ws-products-support-statement-showerheads.pdf); [50 L per washing machine load](https://www.ccw.org.uk/save-money-and-water/averagewateruse/). |
 
 ## Attribution and licenses
 

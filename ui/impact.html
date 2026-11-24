@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#192d43">
+  <title>Estimated impact · AgentTally</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="stylesheet" href="shell.css">
+  <link rel="stylesheet" href="usage.css">
+  <link rel="stylesheet" href="impact.css">
+  <script type="module" src="js/impact.js"></script>
+</head>
+<body class="app-window usage-window impact-window">
+  <a class="skip-link" href="#main">Skip to impact report</a>
+  <header class="top"><div class="bar">
+    <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>AgentTally</div>
+    <nav aria-label="Workspace views">
+      <a href="index.html"><svg aria-hidden="true"><use href="workspace-icons.svg#activity"/></svg>Live activity</a>
+      <a href="usage.html"><svg aria-hidden="true"><use href="workspace-icons.svg#usage"/></svg>Usage</a>
+      <a href="impact.html" aria-current="page"><svg aria-hidden="true"><use href="workspace-icons.svg#impact"/></svg>Impact</a>
+    </nav>
+    <div class="rail-section"><h2>Reporting period</h2><div class="periods" role="group" aria-label="Impact period"><button data-days="1" aria-pressed="true">Today</button><button data-days="7" aria-pressed="false">7 days</button><button data-days="30" aria-pressed="false">30 days</button></div></div>
+    <span class="source-badge" id="source-badge">Connecting</span>
+  </div></header>
+  <main id="main">
+    <div class="intro"><div><h1>Estimated impact</h1><p>Inference energy, emissions and on-site cooling water.</p></div></div>
+    <p id="status" role="status">Connecting to local history…</p>
+    <p id="error" role="alert" hidden></p>
+    <div id="report-content" hidden>
+      <article class="surface" aria-labelledby="footprint-title">
+        <header><h2 id="footprint-title">Footprint in everyday terms</h2><span class="sub" id="dates"></span></header>
+        <div id="impact-empty" class="body" hidden><h3 id="empty-title"></h3><p id="empty-message" class="sub"></p></div>
+        <div id="impact-flow" class="footprint-context">
+          <div class="footprint-plate">
+            <svg viewBox="0 0 200 124" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3">
+              <g transform="rotate(-18 86 60)">
+                <circle cx="86" cy="60" r="42"/><ellipse cx="86" cy="60" rx="20" ry="42"/>
+                <path d="M44 60h84M50 38q36 12 72 0M50 82q36-12 72 0M86 18v84"/>
+                <ellipse cx="86" cy="60" rx="64" ry="15" stroke-dasharray="3 4"/>
+              </g>
+              <g class="rack-lines" stroke-width="2"><rect x="113" y="66" width="48" height="16" rx="3"/><rect x="113" y="86" width="48" height="16" rx="3"/>
+                <path d="M120 74h15m-15 20h15"/><circle cx="153" cy="74" r="1.4"/><circle cx="153" cy="94" r="1.4"/></g>
+            </svg>
+            <span class="confidence">Low confidence</span>
+            <p id="energy-scope"></p>
+          </div>
+          <p class="comparison-note sub">Each group shows three ways to picture the same estimate. The examples don’t add together.</p>
+          <div class="comparisons" id="comparisons"></div>
+        </div>
+      </article>
+      <details class="surface trace-details" id="trace-details">
+        <summary>Energy by token class</summary>
+        <div class="body">
+          <div id="energy-band" class="energy-band" aria-hidden="true"></div>
+          <table aria-label="Estimated energy contributed by each reported token class">
+            <thead><tr><th scope="col">Token class</th><th scope="col">Tokens</th><th scope="col">Energy</th></tr></thead>
+            <tbody id="class-rows"></tbody>
+          </table>
+        </div>
+      </details>
+      <div class="impact-ledgers">
+        <section class="surface" id="model-section" aria-labelledby="models-title">
+          <header><h2 id="models-title">Model contributions</h2></header>
+          <div class="body"><p class="sub ledger-intro">Each model’s factor scales the energy for its classified tokens.</p>
+            <table aria-label="Models ranked by estimated energy"><thead><tr><th scope="col">Reported model</th><th scope="col">Factor</th><th scope="col">Classified tokens</th><th scope="col">Energy</th></tr></thead><tbody id="model-rows"></tbody></table>
+          </div>
+        </section>
+        <section class="surface scope-panel" aria-labelledby="scope-title">
+          <header><h2 id="scope-title">Estimate coverage</h2></header>
+          <div class="body"><p id="coverage-lead" class="ledger-intro"></p><ul class="scope-notes"><li id="excluded"></li><li id="generic"></li><li id="partial"></li><li id="index-coverage"></li></ul></div>
+        </section>
+      </div>
+    </div>
+    <section class="impact-method" aria-labelledby="method-title">
+      <h2 id="method-title">Methodology and limits</h2>
+      <p>Based on CarbonBit methodology v1.1.0. AgentTally uses reported tokens only; it never infers missing usage from text or projects an annual footprint.</p>
+      <details><summary>Factors and source notes</summary>
+        <p id="weighting-note"></p>
+        <p>CarbonBit anchors inference energy to Epoch AI’s 2025 estimate for a typical ChatGPT query. Reference points include Google’s 2025 study of AI serving and Ember’s Global Electricity Review 2024. Actual hardware, batching, location and time are unknown.</p>
+        <p id="conversion-factors"></p>
+        <p>Everyday comparisons use CarbonBit’s v1.1.0 reference amounts: household devices compare energy, UK transport factors compare emissions, and household water uses compare volume. They illustrate scale, not resources saved or activities actually performed.</p>
+        <p>Includes data-center overhead. Excludes training, hardware manufacture, your device and water used to generate electricity. Estimates are rounded; displayed parts may not add up to the displayed total.</p>
+        <p>Adapted source: <span class="source-name">kasuken/vscode-carbonbit</span>, <cite>Methodology</cite>. The bundled factors are versioned as <span id="factor-version"></span>.</p>
+      </details>
+      <p class="sub">Prices do not enter these calculations. <a data-report-link href="usage.html#pricing">API-equivalent pricing in Usage</a> uses published provider rates, inspired by AI Engineering Fluency.</p>
+    </section>
+    <footer>Calculated on this device from retained local history. Live activity is independent of this report.</footer>
+  </main>
+</body>
+</html>
