@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#192d43">
+  <title>Follow-ups · AgentTally</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="shell.css">
+  <link rel="stylesheet" href="followups.css">
+  <script type="module" src="js/followups.js"></script>
+</head>
+<body class="app-window followups-window">
+  <a class="skip-link" href="#main">Skip to follow-ups</a>
+  <header class="top"><div class="bar">
+    <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>AgentTally</div>
+    <nav aria-label="Workspace views">
+      <a href="index.html"><svg aria-hidden="true"><use href="workspace-icons.svg#activity"/></svg>Live activity</a>
+      <a href="usage.html"><svg aria-hidden="true"><use href="workspace-icons.svg#usage"/></svg>Usage</a>
+      <a href="impact.html"><svg aria-hidden="true"><use href="workspace-icons.svg#impact"/></svg>Impact</a>
+      <a href="followups.html" aria-current="page"><svg aria-hidden="true"><use href="workspace-icons.svg#followups"/></svg>Follow-ups</a>
+    </nav>
+    <div class="rail-section">
+      <h2>Filter by project</h2>
+      <label class="sr-only" for="project-filter">Show follow-ups for</label>
+      <select id="project-filter"><option value="">All projects</option></select>
+    </div>
+    <span class="source-badge" id="source-badge" data-mode="local">Stored on this device</span>
+  </div></header>
+  <main id="main">
+    <div class="intro"><div><h1>Follow-ups</h1><p>Keep the next human action close to your agent activity.</p></div></div>
+    <div class="followups-content">
+      <p class="followups-note">These notes are stored locally and are not inferred from agent activity or written to provider logs.</p>
+      <p id="status" role="status" aria-live="polite">Loading local follow-ups…</p>
+      <section class="surface followup-editor" aria-labelledby="editor-title">
+        <header><h2 id="editor-title">Add a follow-up</h2></header>
+        <form id="followup-form" class="followup-form">
+          <label class="project-field" for="project">Project
+            <select id="project" name="project" required></select>
+          </label>
+          <label class="title-field" for="title">What needs attention?
+            <input id="title" name="title" maxlength="500" required autocomplete="off" placeholder="Review the generated patch">
+          </label>
+          <label class="note-field" for="note">Update <span>(optional)</span>
+            <textarea id="note" name="note" rows="3" maxlength="5000" placeholder="Add context or the next step"></textarea>
+          </label>
+          <label class="link-field" for="link">Link <span>(optional)</span>
+            <input id="link" name="link" type="url" maxlength="2048" placeholder="https://github.com/…">
+          </label>
+          <div class="form-actions">
+            <button type="submit" id="save-followup" class="primary-action">Add follow-up</button>
+            <button type="button" id="cancel-edit" hidden>Cancel edit</button>
+          </div>
+        </form>
+      </section>
+      <section class="followup-list" aria-labelledby="list-title">
+        <header class="list-heading"><h2 id="list-title">Your list</h2><span id="item-count"></span></header>
+        <div id="followup-items" class="followup-items"></div>
+        <p id="empty-list" class="empty-list" hidden>No follow-ups yet. Add one above to capture the next step.</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

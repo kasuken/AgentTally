@@ -1,6 +1,6 @@
 [package]
 name = "agent-tally"
-version = "0.6.0"
+version = "0.7.0"
 description = "A live activity and usage dashboard for local AI coding agents"
 edition = "2021"
 

@@ -1,4 +1,5 @@
 mod buddy;
+mod followups;
 mod history;
 mod model;
 mod providers;
@@ -40,14 +41,29 @@ pub fn run() {
     }
     tauri::Builder::default()
         .manage(Latest::default())
-        .invoke_handler(tauri::generate_handler![snapshot, buddy::show_main, history::usage_summary])
+        .invoke_handler(tauri::generate_handler![
+            snapshot,
+            buddy::show_main,
+            followups::follow_ups_list,
+            followups::follow_ups_save,
+            followups::follow_ups_delete,
+            history::usage_summary
+        ])
         .on_window_event(|window, event| {
             if window.label() == "main" {
                 buddy::on_main_event(window, event);
             }
         })
         .setup(|app| {
-            app.manage(history::History::start(app.path().app_data_dir().map_err(|e| e.to_string())));
+            let app_data = app
+                .path()
+                .app_data_dir()
+                .map_err(|e| std::io::Error::other(e.to_string()))?;
+            app.manage(
+                followups::FollowUps::open(&app_data.join("followups-v1.sqlite"))
+                    .map_err(std::io::Error::other)?,
+            );
+            app.manage(history::History::start(Ok(app_data)));
             let handle = app.handle().clone();
             let latest = app.state::<Latest>().0.clone();
             std::thread::spawn(move || {

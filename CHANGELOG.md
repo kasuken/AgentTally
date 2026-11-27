@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.0] - 2026-11-27
+
+### Added
+
+- **Project follow-ups** — Keep a local list of open and completed next steps with optional notes and links. Follow-ups are stored separately from provider logs and are never inferred from agent activity.
+
 ## [0.6.0] - 2026-11-24
 
 ### Added

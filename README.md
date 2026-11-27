@@ -38,6 +38,12 @@ These are **estimates, not direct measurements**. The report identifies missing 
 
 ![Impact workspace comparing seven days of estimated energy, emissions and cooling water with familiar activities, alongside model contributions and coverage. Simulated data.](docs/screenshots/impact-workspace.png)
 
+## Follow-ups
+
+Use **Follow-ups** to keep a short, project-scoped list of actions for you to take. Add a title, optional context, and an optional web link; mark items open or done, edit them, or remove them. Projects are drawn from detected sessions and existing follow-ups.
+
+Follow-ups are stored in a separate local database. They are never inferred from agent activity, written to provider logs, or synced to a service.
+
 ## Supported live sources
 
 | Agent | Local source | What is visible |
@@ -54,7 +60,7 @@ These are **estimates, not direct measurements**. The report identifies missing 
 
 ## Install
 
-Download the latest packaged version from [Releases](https://github.com/kasuken/AgentTally/releases/latest). The live dashboard and local usage history are available starting with v0.5.0.
+Download the latest packaged version from [Releases](https://github.com/kasuken/AgentTally/releases/latest). The live dashboard and local usage history are available starting with v0.5.0. Project follow-ups are available starting with v0.7.0.
 
 | Platform | Download |
 | --- | --- |

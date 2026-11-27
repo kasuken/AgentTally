@@ -71,6 +71,10 @@ a { color: var(--blue); }
   .rail-section > div { display: flex; flex-wrap: wrap; }
   .rail-section button { min-height: 30px; gap: 5px; padding: 4px 8px; }
 }
+@media (max-width: 680px) {
+  .bar { grid-template-columns: auto minmax(0,1fr); grid-template-areas: "brand source" "nav nav" "section section"; }
+  .source-badge { justify-self: end; }
+}
 @media (max-width: 560px) {
   :root { --gutter: 12px; --inset: 11px; }
   .bar { gap: 0 5px; }
@@ -79,8 +83,4 @@ a { color: var(--blue); }
   .bar nav svg { display: none; }
   .bar nav a,.rail-section button { font-size: 12px; padding-inline: 5px; }
   .source-badge { font-size: 11px; gap: 4px; }
-}
-@media (max-width: 440px) {
-  .bar { grid-template-columns: auto minmax(0,1fr); grid-template-areas: "brand source" "nav nav" "section section"; }
-  .source-badge { justify-self: end; }
 }

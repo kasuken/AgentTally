@@ -1,0 +1,46 @@
+.followups-content { width: min(100%, 980px); margin-inline: auto; padding: 18px var(--gutter) 32px; }
+.followups-note { margin-bottom: 16px; color: var(--sub); font-size: 13px; }
+#status { margin-bottom: 14px; color: var(--sub); font-size: 13px; }
+#status[data-error="true"] { color: #a23838; }
+.followup-editor { margin-bottom: 26px; }
+.followup-editor > header { border-bottom: 1px solid var(--line); }
+.followup-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 14px; padding: 16px var(--inset) 18px; }
+.followup-form label { display: grid; gap: 6px; color: var(--ink); font-size: 13px; font-weight: 600; }
+.followup-form label span { color: var(--sub); font-weight: 400; }
+.followup-form input, .followup-form select, .followup-form textarea, .rail-section select {
+  min-width: 0; width: 100%; padding: 9px 10px; border: 1px solid #b9c6d3; border-radius: 6px; background: var(--surface); color: var(--ink);
+}
+.followup-form textarea { resize: vertical; }
+.title-field, .note-field { grid-column: 1 / -1; }
+.form-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; }
+.form-actions button, .followup-actions button {
+  min-height: 36px; padding: 7px 12px; border: 1px solid #b9c6d3; border-radius: 6px; background: var(--surface); color: var(--ink); font-weight: 600;
+}
+.form-actions .primary-action { border-color: #284da8; background: #345dc4; color: #fff; }
+.form-actions button:disabled { cursor: not-allowed; opacity: .55; }
+.list-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.list-heading span { color: var(--sub); font-size: 13px; }
+.followup-items { display: grid; gap: 10px; }
+.followup-card { min-width: 0; padding: 14px var(--inset); border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.followup-card.is-done { background: #f0f5f3; }
+.followup-card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; }
+.followup-card-head h3 { min-width: 0; flex: 1 1 240px; overflow-wrap: anywhere; }
+.followup-state { padding: 2px 8px; border-radius: 99px; background: #e8eef9; color: #294d9e; font-size: 12px; font-weight: 650; }
+.is-done .followup-state { background: #dceee5; color: #276247; }
+.followup-project { margin-top: 5px; color: var(--sub); font-size: 12px; }
+.followup-update { margin-top: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.followup-link { display: inline-block; margin-top: 9px; overflow-wrap: anywhere; }
+.followup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.followup-actions button { min-height: 32px; padding: 5px 10px; font-size: 13px; }
+.followup-actions .delete-action { color: #9c3434; }
+.empty-list { padding: 20px; border: 1px dashed #b9c6d3; border-radius: 9px; color: var(--sub); text-align: center; }
+.rail-section select { min-height: 34px; padding: 5px 8px; color-scheme: dark; }
+@media (max-width: 850px) {
+  .followups-content { padding-top: 14px; }
+  .rail-section select { max-width: 260px; }
+}
+@media (max-width: 560px) {
+  .followup-form { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .followup-form label, .title-field, .note-field, .form-actions { grid-column: 1; }
+  .followup-actions { gap: 7px; }
+}
